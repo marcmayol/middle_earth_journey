@@ -26,8 +26,9 @@
 > que ajustar detalles de interop Kotlin/Native (firmas exactas de CMPedometer/AVFoundation,
 > opcionales, `NSCalendar.currentCalendar`) y, si el `.pbxproj` hecho a mano da guerra,
 > regenerar el proyecto Xcode con el wizard KMP y copiar los 4 archivos Swift/plist/xcconfig.
-> Detalle en `iosApp/README.md`. **Notificaciones de sucesos en iOS**: aún no implementadas
-> (en Android están en `StepTrackingService`); falta `UNUserNotificationCenter` si se quieren.
+> Detalle en `iosApp/README.md`. **Notificaciones de sucesos en iOS**: implementadas
+> (best-effort) con `UNUserNotificationCenter` (`IosNotifications.kt`); la tirada de sucesos
+> usa el común `data/EventEngine.kt` y se resuelve en el bucle de `IosJourneyRepository`.
 >
 > El resto de esta guía (abajo) es el detalle original; sigue siendo válido como referencia.
 

@@ -11,6 +11,7 @@ import platform.UIKit.UIViewController
  * Lo llama Swift desde `iosApp/iosApp/ContentView.swift`.
  */
 fun MainViewController(): UIViewController {
+    requestNotificationAuthorization()
     val settings = createSettings()
     val repo = IosJourneyRepository(settings)
     val viewModel = MainViewModel(repo)

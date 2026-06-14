@@ -1,5 +1,6 @@
 package com.marcm.middleearthjourney.data
 
+import com.marcm.middleearthjourney.postEventNotification
 import com.marcm.middleearthjourney.util.currentHour
 import com.marcm.middleearthjourney.util.epochDay
 import com.marcm.middleearthjourney.util.today
@@ -149,6 +150,30 @@ class IosJourneyRepository(private val settings: Settings) : JourneyRepository {
             todayBaselineCount = todayCount
             persist()
             publishAll()
+            resolveEventsAndNotify()
+        }
+    }
+
+    /** Tira el dado de sucesos (misma lógica que Android) y notifica si sale uno nuevo. */
+    private fun resolveEventsAndNotify() {
+        val res = EventEngine.resolve(
+            routeId = activeRouteId,
+            direction = activeDirectionValue,
+            journeyStartEpochDay = journeyStartEpochDay,
+            todayEpochDay = today().epochDay(),
+            todayKm = stepsToKm(_todaySteps.value),
+            lastCheckpoint = eventCheckpointValue,
+            seen = eventSeenValue,
+        ) ?: return
+        eventCheckpointValue = res.checkpoint
+        eventSeenValue = res.seen
+        eventPendingValue = res.pendingId
+        persist()
+        _eventCheckpoint.value = res.checkpoint
+        _eventSeen.value = res.seen
+        _eventPending.value = res.pendingId
+        res.pendingId?.let { id ->
+            JourneyEvents.byId(activeRouteId, id)?.let { ev -> postEventNotification(ev.title, ev.body) }
         }
     }
 

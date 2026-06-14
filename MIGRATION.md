@@ -1,5 +1,38 @@
 # Migración a Kotlin / Compose Multiplatform (Android + iOS)
 
+> ## ✅ ACTUALIZACIÓN: Android-KMP ya COMPILA y FUNCIONA
+> El código compartido ya está convertido a multiplataforma y **el target Android compila
+> y arranca** sobre Compose Multiplatform (`./gradlew :composeApp:assembleDebug`, verificado).
+> Lo hecho: `java.time`→`kotlinx-datetime`, `String.format`→util común (`util/Format.kt`,
+> `util/Dates.kt`), `ViewModel` común, fuentes vía Compose Resources, logo del splash en
+> `Canvas`, `PathMeasure` de las cinemáticas en común (por subpaths), reloj con
+> `withFrameNanos`. Las capas de plataforma están detrás de interfaces comunes:
+> `data/JourneyRepository.kt` (impl Android = `StepRepository`) y `ui/cinematic/Narrator.kt`
+> (`expect fun rememberNarrator()`, actual Android = `Narrator.android.kt`).
+>
+> ### Lo que QUEDA es solo iOS (tu parte, en el Mac):
+> 1. **`iosMain`** con los `actual`/implementaciones:
+>    - `actual fun rememberNarrator(): Narrator` → `AVSpeechSynthesizer` (voz es-ES, rate/pitch).
+>    - Una implementación de **`JourneyRepository`** para iOS: pasos con **`CMPedometer`**
+>      (CoreMotion) y persistencia con **`multiplatform-settings`** (`NSUserDefaultsSettings`).
+>      Reutiliza la misma lógica de viaje que `StepRepository` (mira ese archivo como guía;
+>      el grueso —km, hitos, sucesos— ya es común en el `MainViewModel`).
+>    - Notificaciones de sucesos con `UNUserNotificationCenter` (en Android están en
+>      `StepTrackingService`; en iOS, al abrir la app o con `BGTaskScheduler`).
+> 2. **Punto de entrada iOS**: un `fun MainViewController()` en `iosMain` que cree el repo
+>    iOS + `MainViewModel` y monte `ComposeUIViewController { AppTheme { /* raíz */ } }`.
+>    La lógica de raíz (colectar flows del ViewModel + `MainScreen` + splash) está hoy en
+>    `androidMain/MainActivity.kt`; replícala en común o en iOS (las partes de permisos
+>    Android y el servicio NO aplican a iOS).
+> 3. **Proyecto Xcode `iosApp/`** (genera una plantilla KMP de Android Studio o el wizard y
+>    copia el código), firma con tu Apple ID gratis, `Info.plist` con `NSMotionUsageDescription`.
+> 4. En `composeApp/build.gradle.kts` los targets de iOS se activan **solos al compilar en
+>    Mac** (`if (isMac) { iosX64(); iosArm64(); iosSimulatorArm64() }`).
+>
+> El resto de esta guía (abajo) es el detalle original; sigue siendo válido como referencia.
+
+---
+
 Guía de handoff para terminar la migración. La app **Android original y funcional**
 está en la rama **`master`** (compila y corre). Esta rama (`kmp-migration`) tiene la
 **estructura KMP ya montada** pero el código compartido **aún no compila**: falta

@@ -20,4 +20,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "MiddleEarthJourney"
-include(":app")
+include(":composeApp")

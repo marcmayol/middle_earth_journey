@@ -1,0 +1,5 @@
+// Rellena TEAM_ID con tu Team de Apple (Xcode > Settings > Accounts; o "Personal Team").
+// Con tu Apple ID gratis vale para instalar en TU iPhone (caduca a los 7 días).
+TEAM_ID=
+BUNDLE_ID=com.marcm.middleearthjourney
+APP_NAME=Middle Earth Journey

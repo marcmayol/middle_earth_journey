@@ -10,24 +10,24 @@
 > `data/JourneyRepository.kt` (impl Android = `StepRepository`) y `ui/cinematic/Narrator.kt`
 > (`expect fun rememberNarrator()`, actual Android = `Narrator.android.kt`).
 >
-> ### Lo que QUEDA es solo iOS (tu parte, en el Mac):
-> 1. **`iosMain`** con los `actual`/implementaciones:
->    - `actual fun rememberNarrator(): Narrator` → `AVSpeechSynthesizer` (voz es-ES, rate/pitch).
->    - Una implementación de **`JourneyRepository`** para iOS: pasos con **`CMPedometer`**
->      (CoreMotion) y persistencia con **`multiplatform-settings`** (`NSUserDefaultsSettings`).
->      Reutiliza la misma lógica de viaje que `StepRepository` (mira ese archivo como guía;
->      el grueso —km, hitos, sucesos— ya es común en el `MainViewModel`).
->    - Notificaciones de sucesos con `UNUserNotificationCenter` (en Android están en
->      `StepTrackingService`; en iOS, al abrir la app o con `BGTaskScheduler`).
-> 2. **Punto de entrada iOS**: un `fun MainViewController()` en `iosMain` que cree el repo
->    iOS + `MainViewModel` y monte `ComposeUIViewController { AppTheme { /* raíz */ } }`.
->    La lógica de raíz (colectar flows del ViewModel + `MainScreen` + splash) está hoy en
->    `androidMain/MainActivity.kt`; replícala en común o en iOS (las partes de permisos
->    Android y el servicio NO aplican a iOS).
-> 3. **Proyecto Xcode `iosApp/`** (genera una plantilla KMP de Android Studio o el wizard y
->    copia el código), firma con tu Apple ID gratis, `Info.plist` con `NSMotionUsageDescription`.
-> 4. En `composeApp/build.gradle.kts` los targets de iOS se activan **solos al compilar en
->    Mac** (`if (isMac) { iosX64(); iosArm64(); iosSimulatorArm64() }`).
+> ### iOS: YA ESCRITO (queda compilar/probar en el Mac y pulir interop)
+> El lado iOS está implementado y el proyecto Xcode creado. En teoría: **abrir Xcode,
+> poner tu Team y darle a Run** (ver **`iosApp/README.md`**). Hecho:
+> - **Raíz común `App.kt`** (commonMain): la lógica de arranque (colectar flows + MainScreen
+>   + splash) ya es común; la usan Android (`MainActivity`) e iOS por igual.
+> - **`composeApp/src/iosMain/`**: `MainViewController.kt` (entrypoint),
+>   `data/IosJourneyRepository.kt` (pasos **CMPedometer** + persistencia **NSUserDefaults**),
+>   `ui/cinematic/Narrator.ios.kt` (**AVSpeechSynthesizer**), `PlatformIos.kt` (Settings).
+> - **`iosApp/`**: proyecto Xcode (`iosApp.xcodeproj`), `iOSApp.swift`, `ContentView.swift`,
+>   `Info.plist` (con `NSMotionUsageDescription`), `Configuration/Config.xcconfig`.
+> - Targets iOS se activan solos en Mac.
+>
+> ⚠️ **Como no hay Mac aquí, el código iOS NO se ha compilado.** Es muy probable que haya
+> que ajustar detalles de interop Kotlin/Native (firmas exactas de CMPedometer/AVFoundation,
+> opcionales, `NSCalendar.currentCalendar`) y, si el `.pbxproj` hecho a mano da guerra,
+> regenerar el proyecto Xcode con el wizard KMP y copiar los 4 archivos Swift/plist/xcconfig.
+> Detalle en `iosApp/README.md`. **Notificaciones de sucesos en iOS**: aún no implementadas
+> (en Android están en `StepTrackingService`); falta `UNUserNotificationCenter` si se quieren.
 >
 > El resto de esta guía (abajo) es el detalle original; sigue siendo válido como referencia.
 

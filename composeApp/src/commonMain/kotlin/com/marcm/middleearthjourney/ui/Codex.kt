@@ -108,14 +108,12 @@ fun routeColor(routeId: RouteId): Color =
 fun routeColorDeep(routeId: RouteId): Color =
     if (routeId == RouteId.FRODO) RouteFrodoDeep else RouteBilboDeep
 
-// ───────────────────────── Formato numérico (español) ─────────────────────────
-private val ES = java.util.Locale("es", "ES")
-
+// ───────────────────────── Formato numérico (re-export del util común) ─────────────────────────
 /** Entero con punto de millar: 13873 → "13.873". */
-fun intEs(v: Long): String = String.format(ES, "%,d", v)
+fun intEs(v: Long): String = com.marcm.middleearthjourney.util.intEs(v)
 
 /** Decimal con coma y punto de millar: 2860.5 → "2.860,5". */
-fun kmEs(v: Double, decimals: Int = 1): String = String.format(ES, "%,.${decimals}f", v)
+fun kmEs(v: Double, decimals: Int = 1): String = com.marcm.middleearthjourney.util.kmEs(v, decimals)
 
 // ───────────────────────── Componentes reutilizables ─────────────────────────
 
@@ -128,7 +126,7 @@ fun Eyebrow(
     align: TextAlign? = null,
 ) {
     Text(
-        text = text.uppercase(java.util.Locale("es", "ES")),
+        text = text.uppercase(),
         modifier = modifier,
         style = MaterialTheme.typography.labelMedium.copy(
             letterSpacing = 1.8.sp,

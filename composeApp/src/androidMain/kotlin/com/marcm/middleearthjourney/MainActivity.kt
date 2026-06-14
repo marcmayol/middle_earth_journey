@@ -15,12 +15,14 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.core.content.ContextCompat
 import com.marcm.middleearthjourney.service.StepTrackingService
 import com.marcm.middleearthjourney.ui.AppTheme
@@ -30,7 +32,13 @@ import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
 
-    private val viewModel: MainViewModel by viewModels()
+    private val viewModel: MainViewModel by viewModels {
+        object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T =
+                MainViewModel((application as MiddleEarthApp).stepRepository) as T
+        }
+    }
 
     private val requestActivityRecognition = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -48,13 +56,13 @@ class MainActivity : ComponentActivity() {
         ensureNotificationPermission()
         setContent {
             AppTheme {
-                val state by viewModel.state.collectAsStateWithLifecycle()
-                val stats by viewModel.stats.collectAsStateWithLifecycle()
-                val permissionGranted by viewModel.permissionGranted.collectAsStateWithLifecycle()
-                val routeChosen by viewModel.routeChosen.collectAsStateWithLifecycle()
-                val cineSeen by viewModel.cineSeen.collectAsStateWithLifecycle()
-                val pendingEvent by viewModel.pendingEvent.collectAsStateWithLifecycle()
-                val eventLog by viewModel.eventLog.collectAsStateWithLifecycle()
+                val state by viewModel.state.collectAsState()
+                val stats by viewModel.stats.collectAsState()
+                val permissionGranted by viewModel.permissionGranted.collectAsState()
+                val routeChosen by viewModel.routeChosen.collectAsState()
+                val cineSeen by viewModel.cineSeen.collectAsState()
+                val pendingEvent by viewModel.pendingEvent.collectAsState()
+                val eventLog by viewModel.eventLog.collectAsState()
                 LaunchedEffect(permissionGranted) {
                     if (permissionGranted) StepTrackingService.start(this@MainActivity)
                 }

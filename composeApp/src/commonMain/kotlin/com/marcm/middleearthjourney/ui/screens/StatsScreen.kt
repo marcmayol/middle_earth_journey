@@ -53,14 +53,14 @@ import com.marcm.middleearthjourney.ui.TextFaint
 import com.marcm.middleearthjourney.ui.TextPrimary
 import com.marcm.middleearthjourney.ui.TextSecondary
 import com.marcm.middleearthjourney.ui.intEs
-import java.time.format.DateTimeFormatter
-import java.util.Locale
+import com.marcm.middleearthjourney.util.compactNumber
+import com.marcm.middleearthjourney.util.fmtDayMonth
+import com.marcm.middleearthjourney.util.fmtLongDate
+import com.marcm.middleearthjourney.util.kmEs
+import com.marcm.middleearthjourney.util.pad2
+import com.marcm.middleearthjourney.util.plusDays
+import kotlinx.datetime.isoDayNumber
 import kotlin.math.roundToLong
-
-private val esDateFormatter: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("d MMM", Locale("es", "ES"))
-private val esDateLongFormatter: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("d 'de' MMMM 'de' yyyy", Locale("es", "ES"))
 
 // Colores de barras
 private val BarNormalTop = HoyGold2
@@ -82,7 +82,7 @@ fun StatsScreen(stats: StatsState) {
         } else if (stats.firstDayWithData != null) {
             item {
                 NoticeCard(
-                    "Datos diarios registrados desde el ${stats.firstDayWithData.format(esDateLongFormatter)}. " +
+                    "Datos diarios registrados desde el ${fmtLongDate(stats.firstDayWithData)}. " +
                         "Los días anteriores aparecen vacíos.",
                 )
             }
@@ -152,7 +152,7 @@ private fun HourlyCard(stats: StatsState) {
         )
         if (peakIdx != null) {
             Spacer(Modifier.height(12.dp))
-            val peakLabel = "%02d:00–%02d:00".format(peakIdx, (peakIdx + 1) % 24)
+            val peakLabel = "${pad2(peakIdx)}:00–${pad2((peakIdx + 1) % 24)}:00"
             Text(
                 text = buildAnnotatedString {
                     append("Hora pico ")
@@ -173,8 +173,8 @@ private fun HourlyCard(stats: StatsState) {
 
 @Composable
 private fun WeeklyCard(stats: StatsState) {
-    val weekEnd = stats.weekStart.plusDays(6)
-    val rangeLabel = "${stats.weekStart.format(esDateFormatter)} — ${weekEnd.format(esDateFormatter)}"
+    val weekEnd = plusDays(stats.weekStart, 6)
+    val rangeLabel = "${fmtDayMonth(stats.weekStart)} — ${fmtDayMonth(weekEnd)}"
 
     CodexCard(modifier = Modifier.fillMaxWidth()) {
         SectionHeader("Esta semana", rangeLabel, intEs(stats.weeklyTotal))
@@ -191,7 +191,7 @@ private fun WeeklyCard(stats: StatsState) {
                 text = buildAnnotatedString {
                     append("Mejor día ")
                     withStyle(SpanStyle(color = GoldBright, fontWeight = FontWeight.SemiBold)) {
-                        append(DOW_LONG[bestDow.value - 1])
+                        append(DOW_LONG[bestDow.isoDayNumber - 1])
                     }
                     append(" · ${intEs(stats.bestDaySteps)} pasos")
                 },
@@ -214,7 +214,7 @@ private fun MonthlyCard(stats: StatsState) {
             val pct = (diff.toDouble() / stats.previousMonthSteps) * 100.0
             StatRow(
                 "Variación",
-                if (diff >= 0) "+%.1f %%".format(Locale("es", "ES"), pct) else "%.1f %%".format(Locale("es", "ES"), pct),
+                if (diff >= 0) "+${kmEs(pct, 1)} %" else "${kmEs(pct, 1)} %",
                 valueColor = if (diff >= 0) GoldBright else Negative,
             )
         }
@@ -334,13 +334,6 @@ private fun DrawScope.drawBarChart(
             drawText(measurer, label, Offset(tx, chartBottom + 4f), labelStyle)
         }
     }
-}
-
-private fun compactNumber(value: Long): String = when {
-    value >= 1_000_000L -> "%.1fM".format(value / 1_000_000.0)
-    value >= 10_000L -> "%.0fk".format(value / 1_000.0)
-    value >= 1_000L -> "%.1fk".format(value / 1_000.0)
-    else -> value.toString()
 }
 
 private val HOUR_LABELS = List(24) { if (it % 3 == 0) it.toString() else "" }

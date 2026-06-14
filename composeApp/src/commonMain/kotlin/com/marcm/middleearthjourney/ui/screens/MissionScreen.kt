@@ -44,14 +44,8 @@ import com.marcm.middleearthjourney.ui.TextPrimary
 import com.marcm.middleearthjourney.ui.TextSecondary
 import com.marcm.middleearthjourney.ui.intEs
 import com.marcm.middleearthjourney.ui.kmEs
-import java.time.format.DateTimeFormatter
-import java.util.Locale
+import com.marcm.middleearthjourney.util.fmtDayMonth
 import kotlin.math.roundToLong
-
-private val esFormatter: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("d MMM yyyy", Locale("es", "ES"))
-private val esShort: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("d MMM", Locale("es", "ES"))
 
 @Composable
 fun MissionScreen(state: JourneyState, quote: String, events: List<JourneyEvent> = emptyList()) {
@@ -243,12 +237,12 @@ private fun DataGrid(state: JourneyState) {
         Row(Modifier.fillMaxWidth()) {
             DataCell(
                 "Iniciada",
-                state.missionStart?.format(esShort) ?: "—",
+                state.missionStart?.let { fmtDayMonth(it) } ?: "—",
                 Modifier.weight(1f),
             )
             DataCell(
                 "Llegada est.",
-                state.estimatedArrival?.format(esShort) ?: "—",
+                state.estimatedArrival?.let { fmtDayMonth(it) } ?: "—",
                 Modifier.weight(1f),
             )
         }

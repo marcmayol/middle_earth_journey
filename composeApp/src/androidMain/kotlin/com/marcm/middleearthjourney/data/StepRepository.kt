@@ -43,7 +43,7 @@ private object Keys {
 
 private const val DAILY_HISTORY_MAX_DAYS = 730L
 
-class StepRepository(private val appContext: Context) : SensorEventListener {
+class StepRepository(private val appContext: Context) : SensorEventListener, JourneyRepository {
 
     private val sensorManager = appContext.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val stepCounterSensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
@@ -53,7 +53,7 @@ class StepRepository(private val appContext: Context) : SensorEventListener {
     private val _totalSteps = MutableStateFlow(0L)
     val totalSteps: StateFlow<Long> = _totalSteps
 
-    val hasSensor: Boolean get() = stepCounterSensor != null
+    override val hasSensor: Boolean get() = stepCounterSensor != null
 
     @Volatile private var accumulated: Long = 0L
     @Volatile private var lastSensorValue: Long = -1L
@@ -70,40 +70,40 @@ class StepRepository(private val appContext: Context) : SensorEventListener {
     @Volatile private var journeyStartEpochDay: Long = -1L
 
     private val _activeRoute = MutableStateFlow(RouteId.FRODO)
-    val activeRoute: StateFlow<RouteId> = _activeRoute
+    override val activeRoute: StateFlow<RouteId> = _activeRoute
 
     private val _activeDirection = MutableStateFlow(Direction.FORWARD)
-    val activeDirection: StateFlow<Direction> = _activeDirection
+    override val activeDirection: StateFlow<Direction> = _activeDirection
 
     private val _journeySteps = MutableStateFlow(0L)
-    val journeySteps: StateFlow<Long> = _journeySteps
+    override val journeySteps: StateFlow<Long> = _journeySteps
 
     private val _journeyStart = MutableStateFlow<Long?>(null)
-    val journeyStart: StateFlow<Long?> = _journeyStart
+    override val journeyStart: StateFlow<Long?> = _journeyStart
 
     @Volatile private var routeChosenValue: Boolean = true
 
     /** false solo en una instalación nueva que aún no ha elegido ruta (primer arranque). */
     private val _routeChosen = MutableStateFlow(true)
-    val routeChosen: StateFlow<Boolean> = _routeChosen
+    override val routeChosen: StateFlow<Boolean> = _routeChosen
 
     // ---- Cinemáticas ya auto-reproducidas en el viaje activo (índices de capítulo) ----
     @Volatile private var cineSeenValue: Set<Int> = emptySet()
     private val _cineSeen = MutableStateFlow<Set<Int>>(emptySet())
-    val cineSeen: StateFlow<Set<Int>> = _cineSeen
+    override val cineSeen: StateFlow<Set<Int>> = _cineSeen
 
     // ---- Sucesos aleatorios del viaje activo (ids en orden), checkpoint y pendiente ----
     @Volatile private var eventSeenValue: List<String> = emptyList()
     private val _eventSeen = MutableStateFlow<List<String>>(emptyList())
-    val eventSeen: StateFlow<List<String>> = _eventSeen
+    override val eventSeen: StateFlow<List<String>> = _eventSeen
 
     @Volatile private var eventCheckpointValue: Int = 0
     private val _eventCheckpoint = MutableStateFlow(0)
-    val eventCheckpoint: StateFlow<Int> = _eventCheckpoint
+    override val eventCheckpoint: StateFlow<Int> = _eventCheckpoint
 
     @Volatile private var eventPendingValue: String? = null
     private val _eventPending = MutableStateFlow<String?>(null)
-    val eventPending: StateFlow<String?> = _eventPending
+    override val eventPending: StateFlow<String?> = _eventPending
 
     private fun publishJourney() {
         _journeySteps.value = (accumulated - journeyBaseline).coerceAtLeast(0L)
@@ -113,17 +113,17 @@ class StepRepository(private val appContext: Context) : SensorEventListener {
     private val dailyHistory: MutableMap<Long, Long> = HashMap()
 
     private val _dailySteps = MutableStateFlow<Map<Long, Long>>(emptyMap())
-    val dailySteps: StateFlow<Map<Long, Long>> = _dailySteps
+    override val dailySteps: StateFlow<Map<Long, Long>> = _dailySteps
 
     private val _todaySteps = MutableStateFlow(0L)
-    val todaySteps: StateFlow<Long> = _todaySteps
+    override val todaySteps: StateFlow<Long> = _todaySteps
 
     private val hourlyLock = Any()
     private val hourly = LongArray(24)
     @Volatile private var hourlyEpochDay: Long = -1L
 
     private val _hourlySteps = MutableStateFlow<List<Long>>(List(24) { 0L })
-    val hourlySteps: StateFlow<List<Long>> = _hourlySteps
+    override val hourlySteps: StateFlow<List<Long>> = _hourlySteps
 
     private fun publishToday() {
         val todayEpoch = LocalDate.now().toEpochDay()
@@ -211,7 +211,7 @@ class StepRepository(private val appContext: Context) : SensorEventListener {
         if (migrationApplied || !migrated || storedRoute == null) persist(markMigrated = true)
     }
 
-    suspend fun ensureLoaded() {
+    override suspend fun ensureLoaded() {
         loadJob.await()
     }
 
@@ -282,7 +282,7 @@ class StepRepository(private val appContext: Context) : SensorEventListener {
      * Inicia un nuevo viaje (cambio de ruta o vuelta a casa). El progreso de la ruta anterior se
      * descarta: el baseline se fija en los pasos acumulados actuales y el viaje arranca en hoy.
      */
-    suspend fun startJourney(route: RouteId, direction: Direction) {
+    override suspend fun startJourney(route: RouteId, direction: Direction) {
         ensureLoaded()
         activeRouteId = route
         activeDirectionValue = direction
@@ -306,7 +306,7 @@ class StepRepository(private val appContext: Context) : SensorEventListener {
     }
 
     /** Marca capítulos de cinemática como ya auto-reproducidos en el viaje activo. */
-    suspend fun markCineSeen(indices: Set<Int>) {
+    override suspend fun markCineSeen(indices: Set<Int>) {
         ensureLoaded()
         if (indices.isEmpty()) return
         cineSeenValue = cineSeenValue + indices
@@ -315,7 +315,7 @@ class StepRepository(private val appContext: Context) : SensorEventListener {
     }
 
     /** Guarda la resolución de sucesos: nuevo checkpoint, lista de vistos (en orden) y pendiente. */
-    suspend fun applyEventResolution(checkpoint: Int, seen: List<String>, pending: String?) {
+    override suspend fun applyEventResolution(checkpoint: Int, seen: List<String>, pending: String?) {
         ensureLoaded()
         eventCheckpointValue = checkpoint
         eventSeenValue = seen
@@ -327,7 +327,7 @@ class StepRepository(private val appContext: Context) : SensorEventListener {
     }
 
     /** Descarta el suceso pendiente (tras mostrarlo). */
-    suspend fun clearEventPending() {
+    override suspend fun clearEventPending() {
         ensureLoaded()
         eventPendingValue = null
         _eventPending.value = null

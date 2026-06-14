@@ -1,30 +1,35 @@
 package com.marcm.middleearthjourney
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.marcm.middleearthjourney.data.Achievement
 import com.marcm.middleearthjourney.data.Achievements
 import com.marcm.middleearthjourney.data.Direction
 import com.marcm.middleearthjourney.data.JourneyEvent
 import com.marcm.middleearthjourney.data.JourneyEvents
+import com.marcm.middleearthjourney.data.JourneyRepository
 import com.marcm.middleearthjourney.data.Quotes
 import com.marcm.middleearthjourney.data.RouteId
 import com.marcm.middleearthjourney.data.Routes
-import com.marcm.middleearthjourney.data.StepRepository
 import com.marcm.middleearthjourney.data.Waypoint
 import com.marcm.middleearthjourney.data.stepsToKm
+import com.marcm.middleearthjourney.util.dateFromEpochDay
+import com.marcm.middleearthjourney.util.dayOfWeekFromMondayIndex
+import com.marcm.middleearthjourney.util.daysInMonth
+import com.marcm.middleearthjourney.util.epochDay
+import com.marcm.middleearthjourney.util.firstOfMonth
+import com.marcm.middleearthjourney.util.minusMonths
+import com.marcm.middleearthjourney.util.mondayOf
+import com.marcm.middleearthjourney.util.plusDays
+import com.marcm.middleearthjourney.util.today
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.time.DayOfWeek
-import java.time.LocalDate
-import java.time.YearMonth
-import java.time.temporal.TemporalAdjusters
+import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.LocalDate
 
 data class JourneyState(
     val steps: Long,
@@ -79,7 +84,7 @@ data class StatsState(
 ) {
     companion object {
         val EMPTY = StatsState(
-            weekStart = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)),
+            weekStart = mondayOf(today()),
             weeklySteps = List(7) { 0L },
             weeklyTotal = 0L,
             bestDayOfWeek = null,
@@ -88,7 +93,7 @@ data class StatsState(
             currentMonthSteps = 0L,
             previousMonthSteps = 0L,
             avgStepsPerDayThisMonth = 0L,
-            currentYear = LocalDate.now().year,
+            currentYear = today().year,
             currentYearSteps = 0L,
             monthlySeries = List(12) { 0L },
             daysWithData = 0,
@@ -100,13 +105,11 @@ data class StatsState(
     }
 }
 
-class MainViewModel(app: Application) : AndroidViewModel(app) {
-
-    private val repo: StepRepository = (app as MiddleEarthApp).stepRepository
+class MainViewModel(private val repo: JourneyRepository) : ViewModel() {
 
     val hasSensor: Boolean get() = repo.hasSensor
 
-    val quoteOfTheDay: String = Quotes.forDay(LocalDate.now().toEpochDay())
+    val quoteOfTheDay: String = Quotes.forDay(today().epochDay())
 
     private val _permissionGranted = MutableStateFlow(false)
     val permissionGranted: StateFlow<Boolean> = _permissionGranted
@@ -187,16 +190,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val legProgress = ((km - legFrom) / legTotalKm).toFloat().coerceIn(0f, 1f)
         val finished = km >= total
 
-        val missionStart = startEpoch?.let { LocalDate.ofEpochDay(it) }
-        val today = LocalDate.now()
+        val missionStart = startEpoch?.let { dateFromEpochDay(it) }
+        val now = today()
         val daysElapsed = missionStart?.let {
-            (today.toEpochDay() - it.toEpochDay()).toInt().coerceAtLeast(0) + 1
+            (now.epochDay() - it.epochDay()).toInt().coerceAtLeast(0) + 1
         } ?: 0
         val avgKmPerDay = if (daysElapsed > 0) km / daysElapsed else 0.0
         val estimatedArrival = if (avgKmPerDay > 0.05 && !finished) {
             val remaining = total - km
             val daysToGo = (remaining / avgKmPerDay).toLong()
-            today.plusDays(daysToGo)
+            plusDays(now, daysToGo)
         } else null
 
         val destinationName = route.destinationName(direction)
@@ -259,41 +262,38 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun buildStats(daily: Map<Long, Long>, hourly: List<Long>): StatsState {
-        val today = LocalDate.now()
-        val weekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+        val now = today()
+        val weekStart = mondayOf(now)
         val weekly = (0..6).map { offset ->
-            daily[weekStart.plusDays(offset.toLong()).toEpochDay()] ?: 0L
+            daily[plusDays(weekStart, offset.toLong()).epochDay()] ?: 0L
         }
         val weeklyTotal = weekly.sum()
         val bestIdx = weekly.withIndex().filter { it.value > 0L }.maxByOrNull { it.value }?.index
-        val bestDow = bestIdx?.let { DayOfWeek.of(it + 1) }
+        val bestDow = bestIdx?.let { dayOfWeekFromMondayIndex(it) }
         val bestSteps = if (bestIdx != null) weekly[bestIdx] else 0L
 
-        val ym = YearMonth.from(today)
-        val firstOfMonth = ym.atDay(1)
-        val daysInMonth = ym.lengthOfMonth()
+        val firstThisMonth = firstOfMonth(now)
+        val daysThisMonth = daysInMonth(now.year, now.monthNumber)
         var currentMonthSteps = 0L
-        for (d in 0 until daysInMonth) {
-            currentMonthSteps += daily[firstOfMonth.plusDays(d.toLong()).toEpochDay()] ?: 0L
+        for (d in 0 until daysThisMonth) {
+            currentMonthSteps += daily[plusDays(firstThisMonth, d.toLong()).epochDay()] ?: 0L
         }
-        val prevYm = ym.minusMonths(1)
-        val prevFirst = prevYm.atDay(1)
-        val prevDays = prevYm.lengthOfMonth()
+        val prevFirst = minusMonths(firstThisMonth, 1)
+        val prevDays = daysInMonth(prevFirst.year, prevFirst.monthNumber)
         var previousMonthSteps = 0L
         for (d in 0 until prevDays) {
-            previousMonthSteps += daily[prevFirst.plusDays(d.toLong()).toEpochDay()] ?: 0L
+            previousMonthSteps += daily[plusDays(prevFirst, d.toLong()).epochDay()] ?: 0L
         }
 
-        val avgPerDay = if (today.dayOfMonth > 0) currentMonthSteps / today.dayOfMonth else 0L
+        val avgPerDay = if (now.dayOfMonth > 0) currentMonthSteps / now.dayOfMonth else 0L
 
-        val year = today.year
+        val year = now.year
         val monthlySeries = (1..12).map { monthIdx ->
-            val mYm = YearMonth.of(year, monthIdx)
-            val first = mYm.atDay(1)
-            val len = mYm.lengthOfMonth()
+            val first = LocalDate(year, monthIdx, 1)
+            val len = daysInMonth(year, monthIdx)
             var sum = 0L
             for (d in 0 until len) {
-                sum += daily[first.plusDays(d.toLong()).toEpochDay()] ?: 0L
+                sum += daily[plusDays(first, d.toLong()).epochDay()] ?: 0L
             }
             sum
         }
@@ -303,8 +303,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val firstDay = daily.entries
             .filter { it.value > 0L }
             .minByOrNull { it.key }
-            ?.let { LocalDate.ofEpochDay(it.key) }
-        val monthLabel = MONTH_NAMES.getOrElse(ym.monthValue - 1) { "" }
+            ?.let { dateFromEpochDay(it.key) }
+        val monthLabel = MONTH_NAMES.getOrElse(now.monthNumber - 1) { "" }
 
         return StatsState(
             weekStart = weekStart,
@@ -322,7 +322,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             daysWithData = daysWithData,
             hasHistory = daysWithData > 0,
             firstDayWithData = firstDay,
-            todaySteps = daily[today.toEpochDay()] ?: 0L,
+            todaySteps = daily[now.epochDay()] ?: 0L,
             hourlySteps = hourly,
         )
     }

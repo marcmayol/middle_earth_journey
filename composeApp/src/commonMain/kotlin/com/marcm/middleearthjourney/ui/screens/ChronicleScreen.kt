@@ -44,6 +44,7 @@ import com.marcm.middleearthjourney.ui.TextPrimary
 import com.marcm.middleearthjourney.ui.TextSecondary
 import com.marcm.middleearthjourney.ui.cinematic.collectionFor
 import com.marcm.middleearthjourney.ui.kmEs
+import com.marcm.middleearthjourney.util.pad2
 
 @Composable
 fun ChronicleScreen(
@@ -85,7 +86,7 @@ fun ChronicleScreen(
                     contentAlignment = Alignment.Center,
                 ) {
                     if (unlocked) {
-                        Text("%02d".format(i + 1), style = MaterialTheme.typography.titleSmall, color = GoldBright)
+                        Text(pad2(i + 1), style = MaterialTheme.typography.titleSmall, color = GoldBright)
                     } else {
                         Icon(Icons.Outlined.Lock, contentDescription = null, tint = TextFaint, modifier = Modifier.size(17.dp))
                     }

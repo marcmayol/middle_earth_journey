@@ -1,5 +1,3 @@
-import org.jetbrains.compose.resources.ResourcesExtension
-
 plugins {
     alias(libs.plugins.multiplatform)
     alias(libs.plugins.android.application)
@@ -43,6 +41,7 @@ kotlin {
         }
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
+            implementation(libs.androidx.datastore.preferences)
             implementation(libs.kotlinx.coroutines.android)
         }
     }
@@ -51,7 +50,6 @@ kotlin {
 compose.resources {
     publicResClass = true
     packageOfResClass = "com.marcm.middleearthjourney.resources"
-    generateResClass = ResourcesExtension.ResourceClassGeneration.Always
 }
 
 android {

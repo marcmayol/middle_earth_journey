@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Splash del sistema (Android 12+): fondo oscuro del códice + el logo Ruta Circular. -->
+    <style name="Theme.MiddleEarthJourney" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">#160F09</item>
+        <item name="android:navigationBarColor">#0E0A06</item>
+        <item name="android:windowBackground">#160F09</item>
+        <item name="android:windowSplashScreenBackground">#160F09</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+    </style>
+</resources>

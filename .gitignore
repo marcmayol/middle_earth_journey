@@ -1,0 +1,31 @@
+# Gradle
+.gradle/
+build/
+**/build/
+
+# Local config (rutas del SDK propias de cada máquina)
+local.properties
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+.kotlin/captures/
+.cxx/
+
+# Kotlin Multiplatform / Kotlin
+.kotlin/
+
+# macOS / Xcode (para cuando se añada iOS)
+.DS_Store
+xcuserdata/
+*.xcworkspace/xcuserdata/
+iosApp/iosApp.xcodeproj/project.xcworkspace/xcuserdata/
+iosApp/iosApp.xcodeproj/xcuserdata/
+iosApp/Pods/
+iosApp/build/
+Pods/
+
+# Misc
+*.log
+*.keystore
+!debug.keystore

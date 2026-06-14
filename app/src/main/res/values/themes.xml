@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.MiddleEarthJourney" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">#160F09</item>
+        <item name="android:navigationBarColor">#0E0A06</item>
+        <item name="android:windowBackground">#160F09</item>
+    </style>
+</resources>

@@ -25,6 +25,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
@@ -36,6 +37,7 @@ class StepTrackingService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var observeJob: Job? = null
     private var eventObserveJob: Job? = null
+    private var refreshJob: Job? = null
     private var eventResolvingUpTo = -1
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -62,6 +64,17 @@ class StepTrackingService : Service() {
         }
 
         scope.launch { repo.startListening() }
+
+        // En modo Health Connect releemos periódicamente para recoger los pasos que el
+        // smartwatch va sincronizando. repo.refresh() es no-op si la fuente es el sensor.
+        if (refreshJob == null) {
+            refreshJob = scope.launch {
+                while (true) {
+                    delay(HC_REFRESH_INTERVAL_MS)
+                    repo.refresh()
+                }
+            }
+        }
 
         if (observeJob == null) {
             observeJob = scope.launch {
@@ -100,6 +113,8 @@ class StepTrackingService : Service() {
         observeJob = null
         eventObserveJob?.cancel()
         eventObserveJob = null
+        refreshJob?.cancel()
+        refreshJob = null
         super.onDestroy()
     }
 
@@ -239,6 +254,7 @@ class StepTrackingService : Service() {
         private const val EVENT_NOTIF_ID = 43
         private const val MIN_KM_FOR_EVENT = 3.0 // solo salta tras andar 3 km ese día
         private const val EVENT_PROBABILITY = 0.6f
+        private const val HC_REFRESH_INTERVAL_MS = 15L * 60L * 1000L // refresco Health Connect cada 15 min
 
         fun start(context: Context) {
             val intent = Intent(context, StepTrackingService::class.java)

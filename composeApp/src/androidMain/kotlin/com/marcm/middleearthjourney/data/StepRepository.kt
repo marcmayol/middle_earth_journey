@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.time.Instant
 import java.time.LocalDate
 
 private val Context.dataStore by preferencesDataStore(name = "frodo_steps")
@@ -39,14 +40,22 @@ private object Keys {
     val EVENT_SEEN = stringPreferencesKey("event_seen")
     val EVENT_CHECKPOINT = longPreferencesKey("event_checkpoint")
     val EVENT_PENDING = stringPreferencesKey("event_pending")
+    val HC_ENABLED = booleanPreferencesKey("hc_enabled")
+    val HC_ANCHOR_MILLIS = longPreferencesKey("hc_anchor_millis")
+    val HC_ANCHOR_OFFSET = longPreferencesKey("hc_anchor_offset")
 }
 
 private const val DAILY_HISTORY_MAX_DAYS = 730L
+
+/** Cuántos días hacia atrás refrescamos el histórico diario desde Health Connect. */
+private const val HC_DAILY_WINDOW_DAYS = 120L
 
 class StepRepository(private val appContext: Context) : SensorEventListener, JourneyRepository {
 
     private val sensorManager = appContext.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val stepCounterSensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
+
+    private val healthConnect = HealthConnectStepSource(appContext)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -105,7 +114,29 @@ class StepRepository(private val appContext: Context) : SensorEventListener, Jou
     private val _eventPending = MutableStateFlow<String?>(null)
     override val eventPending: StateFlow<String?> = _eventPending
 
+    // ---- Modo Health Connect (fuente agregada: móvil + smartwatch) ----
+    // Cuando está activo, los pasos del viaje se cuentan desde un "anchor" (instante de
+    // referencia) más un offset que preserva el progreso que ya había al activarlo. Así el
+    // cambio de fuente nunca hace retroceder el mapa, y a partir de ahí cuentan también los
+    // pasos del reloj. El sensor del móvil queda en reserva (caída automática si se revoca).
+    @Volatile private var hcEnabled: Boolean = false
+    @Volatile private var hcAnchorMillis: Long = -1L
+    @Volatile private var hcAnchorOffset: Long = 0L
+
+    private val _usingHealthConnect = MutableStateFlow(false)
+    val usingHealthConnect: StateFlow<Boolean> = _usingHealthConnect
+
+    /** ¿Hay Health Connect utilizable en este dispositivo? (para ofrecer activarlo en la UI) */
+    val healthConnectAvailable: Boolean get() = healthConnect.isAvailable()
+
+    /** Permisos de salud a solicitar desde la Activity. */
+    val healthConnectPermissions: Set<String> get() = healthConnect.permissions
+
+    /** Contract para lanzar la solicitud de permisos de salud desde la Activity. */
+    fun healthConnectPermissionContract() = healthConnect.requestPermissionsContract()
+
     private fun publishJourney() {
+        if (hcEnabled) return // en modo Health Connect el valor lo fija refreshFromHealthConnect()
         _journeySteps.value = (accumulated - journeyBaseline).coerceAtLeast(0L)
     }
 
@@ -181,7 +212,14 @@ class StepRepository(private val appContext: Context) : SensorEventListener, Jou
         _eventCheckpoint.value = eventCheckpointValue
         eventPendingValue = prefs[Keys.EVENT_PENDING]?.ifBlank { null }
         _eventPending.value = eventPendingValue
+        hcEnabled = prefs[Keys.HC_ENABLED] ?: false
+        hcAnchorMillis = prefs[Keys.HC_ANCHOR_MILLIS] ?: -1L
+        hcAnchorOffset = prefs[Keys.HC_ANCHOR_OFFSET] ?: 0L
+        _usingHealthConnect.value = hcEnabled
         publishJourney()
+        // En modo HC mostramos al menos el progreso preservado hasta que llegue el primer
+        // refresco real (evita un parpadeo a 0 al abrir la app).
+        if (hcEnabled) _journeySteps.value = hcAnchorOffset.coerceAtLeast(0L)
         val historyRaw = prefs[Keys.DAILY_HISTORY].orEmpty()
         val migrated = prefs[Keys.MIGRATED_DAILY_V1] ?: false
         var migrationApplied = false
@@ -217,6 +255,18 @@ class StepRepository(private val appContext: Context) : SensorEventListener, Jou
 
     suspend fun startListening() {
         ensureLoaded()
+        if (hcEnabled) {
+            if (healthConnect.isAvailable() && healthConnect.hasPermission()) {
+                _usingHealthConnect.value = true
+                refreshFromHealthConnect()
+                return // en modo HC no registramos el sensor: evita doble conteo
+            }
+            // Health Connect dejó de estar disponible o se revocó el permiso → caída al sensor.
+            hcEnabled = false
+            _usingHealthConnect.value = false
+            publishJourney()
+            persist()
+        }
         stepCounterSensor?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
         }
@@ -224,6 +274,75 @@ class StepRepository(private val appContext: Context) : SensorEventListener, Jou
 
     fun stopListening() {
         sensorManager.unregisterListener(this)
+    }
+
+    /**
+     * Activa Health Connect como fuente de pasos (móvil + smartwatch). Debe llamarse tras
+     * conceder el permiso de salud. Es idempotente: si ya estaba activo, solo refresca.
+     * Al activarlo por primera vez fija el anchor en "ahora" y preserva el progreso actual
+     * del viaje, de modo que el cambio de fuente no altera el avance en el mapa.
+     *
+     * @return true si quedó activo; false si Health Connect no está disponible o sin permiso.
+     */
+    suspend fun enableHealthConnect(): Boolean {
+        ensureLoaded()
+        if (!healthConnect.isAvailable() || !healthConnect.hasPermission()) return false
+        if (!hcEnabled) {
+            hcEnabled = true
+            hcAnchorMillis = System.currentTimeMillis()
+            hcAnchorOffset = (accumulated - journeyBaseline).coerceAtLeast(0L)
+            _usingHealthConnect.value = true
+            stopListening() // el sensor ya no hace falta
+            persist()
+        }
+        refreshFromHealthConnect()
+        return true
+    }
+
+    /** Relee los datos desde Health Connect (si el modo está activo). Seguro de llamar siempre. */
+    suspend fun refresh() {
+        ensureLoaded()
+        if (hcEnabled) refreshFromHealthConnect()
+    }
+
+    private suspend fun refreshFromHealthConnect() {
+        if (!hcEnabled) return
+        val now = Instant.now()
+        val anchor = if (hcAnchorMillis >= 0L) Instant.ofEpochMilli(hcAnchorMillis) else now
+        val raw = healthConnect.aggregateSteps(anchor, now)
+        _journeySteps.value = (raw + hcAnchorOffset).coerceAtLeast(0L)
+
+        val todayEpoch = LocalDate.now().toEpochDay()
+        if (missionStartEpochDay < 0L) {
+            missionStartEpochDay = todayEpoch
+            _missionStart.value = missionStartEpochDay
+        }
+        if (journeyStartEpochDay < 0L) {
+            journeyStartEpochDay = todayEpoch
+            _journeyStart.value = journeyStartEpochDay
+        }
+
+        // Histórico diario: Health Connect manda en la ventana reciente; conservamos los días
+        // antiguos que ya tuviéramos del sensor (no se borran).
+        val startDate = LocalDate.now().minusDays(HC_DAILY_WINDOW_DAYS)
+        val buckets = healthConnect.dailyBuckets(startDate)
+        if (buckets.isNotEmpty()) {
+            synchronized(dailyHistoryLock) {
+                for ((day, steps) in buckets) dailyHistory[day] = steps
+                pruneOldDays(todayEpoch)
+                _dailySteps.value = HashMap(dailyHistory)
+                publishToday()
+            }
+        }
+
+        // Reparto por hora del día de hoy.
+        val hours = healthConnect.hourlyToday()
+        synchronized(hourlyLock) {
+            hourlyEpochDay = todayEpoch
+            for (i in 0 until 24) hourly[i] = hours[i]
+            publishHourly()
+        }
+        persist()
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
@@ -288,6 +407,11 @@ class StepRepository(private val appContext: Context) : SensorEventListener, Jou
         activeDirectionValue = direction
         journeyBaseline = accumulated
         journeyStartEpochDay = LocalDate.now().toEpochDay()
+        if (hcEnabled) {
+            // Nuevo viaje: contamos desde cero a partir de ahora.
+            hcAnchorMillis = System.currentTimeMillis()
+            hcAnchorOffset = 0L
+        }
         routeChosenValue = true
         cineSeenValue = emptySet()
         eventSeenValue = emptyList()
@@ -303,6 +427,7 @@ class StepRepository(private val appContext: Context) : SensorEventListener, Jou
         _eventPending.value = null
         publishJourney()
         persist()
+        if (hcEnabled) refreshFromHealthConnect()
     }
 
     /** Marca capítulos de cinemática como ya auto-reproducidos en el viaje activo. */
@@ -349,6 +474,9 @@ class StepRepository(private val appContext: Context) : SensorEventListener, Jou
         val snapshotEventSeen = eventSeenValue
         val snapshotEventCp = eventCheckpointValue
         val snapshotEventPending = eventPendingValue
+        val snapshotHcEnabled = hcEnabled
+        val snapshotHcAnchorMillis = hcAnchorMillis
+        val snapshotHcAnchorOffset = hcAnchorOffset
         scope.launch {
             appContext.dataStore.edit { prefs ->
                 prefs[Keys.ACCUMULATED] = snapshotAccumulated
@@ -365,6 +493,9 @@ class StepRepository(private val appContext: Context) : SensorEventListener, Jou
                 prefs[Keys.EVENT_SEEN] = snapshotEventSeen.joinToString(",")
                 prefs[Keys.EVENT_CHECKPOINT] = snapshotEventCp.toLong()
                 prefs[Keys.EVENT_PENDING] = snapshotEventPending ?: ""
+                prefs[Keys.HC_ENABLED] = snapshotHcEnabled
+                if (snapshotHcAnchorMillis >= 0L) prefs[Keys.HC_ANCHOR_MILLIS] = snapshotHcAnchorMillis
+                prefs[Keys.HC_ANCHOR_OFFSET] = snapshotHcAnchorOffset
                 if (markMigrated) prefs[Keys.MIGRATED_DAILY_V1] = true
             }
         }

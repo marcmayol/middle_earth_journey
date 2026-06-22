@@ -5,6 +5,7 @@ compose = "1.6.11"
 androidx-activityCompose = "1.9.0"
 androidx-datastore = "1.1.1"
 androidx-coreSplashscreen = "1.0.1"
+healthConnect = "1.1.0-alpha07"
 lifecycleViewmodelCompose = "2.8.0"
 kotlinxCoroutines = "1.8.1"
 multiplatformSettings = "1.1.1"
@@ -26,6 +27,7 @@ androidx-activity-compose = { module = "androidx.activity:activity-compose", ver
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "androidx-datastore" }
 androidx-core-splashscreen = { module = "androidx.core:core-splashscreen", version.ref = "androidx-coreSplashscreen" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlinxCoroutines" }
+androidx-health-connect = { module = "androidx.health.connect:connect-client", version.ref = "healthConnect" }
 
 [plugins]
 multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }

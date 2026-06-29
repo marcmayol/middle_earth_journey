@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Hiking
 import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -63,6 +65,7 @@ import com.marcm.middleearthjourney.ui.screens.AchievementsScreen
 import com.marcm.middleearthjourney.ui.screens.ChronicleScreen
 import com.marcm.middleearthjourney.ui.screens.MapScreen
 import com.marcm.middleearthjourney.ui.screens.MissionScreen
+import com.marcm.middleearthjourney.ui.screens.SettingsScreen
 import com.marcm.middleearthjourney.ui.screens.StatsScreen
 
 private enum class Tab(val label: String, val icon: ImageVector) {
@@ -89,8 +92,15 @@ fun MainScreen(
     pendingEvent: JourneyEvent? = null,
     onDismissEvent: () -> Unit = {},
     eventLog: List<JourneyEvent> = emptyList(),
+    weightKg: Int = 70,
+    heightCm: Int = 170,
+    showCalories: Boolean = true,
+    onWeightChange: (Int) -> Unit = {},
+    onHeightChange: (Int) -> Unit = {},
+    onShowCaloriesChange: (Boolean) -> Unit = {},
 ) {
     var showChooser by rememberSaveable { mutableStateOf(false) }
+    var showSettings by rememberSaveable { mutableStateOf(false) }
 
     if (!routeChosen || showChooser) {
         Box(Modifier.fillMaxSize().background(pageBackgroundBrush())) {
@@ -151,12 +161,48 @@ fun MainScreen(
             }
         }
 
+        // Acceso a Ajustes: engranaje discreto en la esquina superior derecha.
+        if (playingChapter == null && !showSettings) {
+            Box(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .statusBarsPadding()
+                    .padding(top = 8.dp, end = 14.dp)
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(NavTop.copy(alpha = 0.55f))
+                    .border(1.dp, GoldBorderSoft, RoundedCornerShape(20.dp))
+                    .clickable { showSettings = true },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Filled.Settings,
+                    contentDescription = "Ajustes",
+                    tint = GoldBright,
+                    modifier = Modifier.size(21.dp),
+                )
+            }
+        }
+
         // Reproductor de cinemática a pantalla completa (sobre la barra de navegación)
         playingChapter?.let { chapter ->
             CinematicPlayer(
                 collection = collectionFor(state.routeId, state.direction),
                 startChapter = chapter,
                 onExit = { playingChapter = null },
+            )
+        }
+
+        // Overlay de Ajustes (sobre todo, incluida la barra inferior).
+        if (showSettings) {
+            SettingsScreen(
+                weightKg = weightKg,
+                heightCm = heightCm,
+                showCalories = showCalories,
+                onWeightChange = onWeightChange,
+                onHeightChange = onHeightChange,
+                onShowCaloriesChange = onShowCaloriesChange,
+                onClose = { showSettings = false },
             )
         }
     }

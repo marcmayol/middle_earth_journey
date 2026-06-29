@@ -12,10 +12,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,6 +35,7 @@ import com.marcm.middleearthjourney.data.JourneyEvent
 import com.marcm.middleearthjourney.ui.CellBg
 import com.marcm.middleearthjourney.ui.CodexCard
 import com.marcm.middleearthjourney.ui.CardQuietBrush
+import com.marcm.middleearthjourney.ui.Ember
 import com.marcm.middleearthjourney.ui.Eyebrow
 import com.marcm.middleearthjourney.ui.GoldBright
 import com.marcm.middleearthjourney.ui.GoldDeep
@@ -56,6 +61,9 @@ fun MissionScreen(state: JourneyState, quote: String, events: List<JourneyEvent>
     ) {
         item { Header(state) }
         item { TodayCard(state) }
+        if (state.showCalories) {
+            item { CaloriesTodayCard(state) }
+        }
         item { Hero(state) }
         item { GlobalProgress(state) }
         if (state.nextWaypoint != null) {
@@ -128,6 +136,58 @@ private fun TodayCard(state: JourneyState) {
                         .background(OnHoy.copy(alpha = 0.3f)),
                 )
                 TodayMetric(kmEs(state.todayKm, 2), "km", Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun CaloriesTodayCard(state: JourneyState) {
+    CodexCard(
+        modifier = Modifier.fillMaxWidth(),
+        brush = CardQuietBrush,
+        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 16.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(CellBg)
+                    .border(1.dp, GoldDivider, RoundedCornerShape(14.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Filled.LocalFireDepartment,
+                    contentDescription = null,
+                    tint = Ember,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Eyebrow("Calorías hoy")
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    "Estimación · se reinicia a medianoche",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextFaint,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    intEs(state.todayCalories),
+                    style = MaterialTheme.typography.displaySmall.copy(fontSize = 30.sp),
+                    color = GoldBright,
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    "kcal",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(bottom = 5.dp),
+                )
             }
         }
     }

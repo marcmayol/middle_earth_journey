@@ -1,6 +1,8 @@
 package com.marcm.middleearthjourney.ui.screens
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,13 +13,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -37,8 +45,10 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import com.marcm.middleearthjourney.StatsState
+import com.marcm.middleearthjourney.ui.CellBg
 import com.marcm.middleearthjourney.ui.CodexCard
 import com.marcm.middleearthjourney.ui.CardQuietBrush
+import com.marcm.middleearthjourney.ui.Ember
 import com.marcm.middleearthjourney.ui.Eyebrow
 import com.marcm.middleearthjourney.ui.GoldBase
 import com.marcm.middleearthjourney.ui.GoldBright
@@ -88,6 +98,9 @@ fun StatsScreen(stats: StatsState) {
             }
         }
 
+        if (stats.caloriesEnabled) {
+            item { CaloriesCard(stats) }
+        }
         item { HourlyCard(stats) }
         item { WeeklyCard(stats) }
         item { MonthlyCard(stats) }
@@ -232,6 +245,55 @@ private fun YearlyCard(stats: StatsState) {
             modifier = Modifier.fillMaxWidth().height(170.dp),
             compactLabels = true,
         )
+    }
+}
+
+@Composable
+private fun CaloriesCard(stats: StatsState) {
+    CodexCard(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(RoundedCornerShape(11.dp))
+                        .background(CellBg)
+                        .border(1.dp, GoldDivider, RoundedCornerShape(11.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Filled.LocalFireDepartment,
+                        contentDescription = null,
+                        tint = Ember,
+                        modifier = Modifier.size(19.dp),
+                    )
+                }
+                Spacer(Modifier.size(10.dp))
+                Column {
+                    Eyebrow("Energía de la travesía")
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        "Calorías quemadas (estimación)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextFaint,
+                    )
+                }
+            }
+            Text(
+                "${intEs(stats.journeyCalories)} kcal",
+                style = MaterialTheme.typography.titleMedium,
+                color = GoldBright,
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        StatRow("Hoy", "${intEs(stats.todayCalories)} kcal")
+        StatRow("Esta semana", "${intEs(stats.weekCalories)} kcal")
+        StatRow("Este mes", "${intEs(stats.monthCalories)} kcal")
+        StatRow("Año ${stats.currentYear}", "${intEs(stats.yearCalories)} kcal")
     }
 }
 

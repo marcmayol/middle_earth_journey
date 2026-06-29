@@ -36,6 +36,9 @@ fun App(viewModel: MainViewModel, onRequestPermission: () -> Unit = {}) {
         val cineSeen by viewModel.cineSeen.collectAsState()
         val pendingEvent by viewModel.pendingEvent.collectAsState()
         val eventLog by viewModel.eventLog.collectAsState()
+        val weightKg by viewModel.weightKg.collectAsState()
+        val heightCm by viewModel.heightCm.collectAsState()
+        val showCalories by viewModel.showCalories.collectAsState()
 
         var showSplash by remember { mutableStateOf(true) }
         LaunchedEffect(Unit) {
@@ -59,6 +62,12 @@ fun App(viewModel: MainViewModel, onRequestPermission: () -> Unit = {}) {
                 pendingEvent = pendingEvent,
                 onDismissEvent = { viewModel.dismissEvent() },
                 eventLog = eventLog,
+                weightKg = weightKg,
+                heightCm = heightCm,
+                showCalories = showCalories,
+                onWeightChange = { viewModel.setWeightKg(it) },
+                onHeightChange = { viewModel.setHeightCm(it) },
+                onShowCaloriesChange = { viewModel.setShowCalories(it) },
             )
             AnimatedVisibility(
                 visible = showSplash,

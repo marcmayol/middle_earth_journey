@@ -52,6 +52,9 @@ class IosJourneyRepository(private val settings: Settings) : JourneyRepository {
     private var eventSeenValue: List<String> = emptyList()
     private var eventCheckpointValue: Int = 0
     private var eventPendingValue: String? = null
+    private var weightKgValue: Int = DEFAULT_WEIGHT_KG
+    private var heightCmValue: Int = DEFAULT_HEIGHT_CM
+    private var showCaloriesValue: Boolean = true
 
     private val _journeySteps = MutableStateFlow(0L)
     override val journeySteps: StateFlow<Long> = _journeySteps
@@ -77,6 +80,12 @@ class IosJourneyRepository(private val settings: Settings) : JourneyRepository {
     override val eventCheckpoint: StateFlow<Int> = _eventCheckpoint
     private val _eventPending = MutableStateFlow<String?>(null)
     override val eventPending: StateFlow<String?> = _eventPending
+    private val _weightKg = MutableStateFlow(DEFAULT_WEIGHT_KG)
+    override val weightKg: StateFlow<Int> = _weightKg
+    private val _heightCm = MutableStateFlow(DEFAULT_HEIGHT_CM)
+    override val heightCm: StateFlow<Int> = _heightCm
+    private val _showCalories = MutableStateFlow(true)
+    override val showCalories: StateFlow<Boolean> = _showCalories
 
     override val hasSensor: Boolean get() = CMPedometer.isStepCountingAvailable()
 
@@ -102,6 +111,9 @@ class IosJourneyRepository(private val settings: Settings) : JourneyRepository {
         eventSeenValue = settings["event_seen", ""].split(",").filter { it.isNotBlank() }
         eventCheckpointValue = settings["event_checkpoint", 0L].toInt()
         eventPendingValue = settings["event_pending", ""].ifBlank { null }
+        weightKgValue = settings["body_weight_kg", DEFAULT_WEIGHT_KG].coerceIn(WEIGHT_RANGE)
+        heightCmValue = settings["body_height_cm", DEFAULT_HEIGHT_CM].coerceIn(HEIGHT_RANGE)
+        showCaloriesValue = settings["show_calories", true]
         publishAll()
     }
 
@@ -118,6 +130,9 @@ class IosJourneyRepository(private val settings: Settings) : JourneyRepository {
         _journeySteps.value = (accumulated - journeyBaseline).coerceAtLeast(0L)
         _todaySteps.value = dailyHistory[today().epochDay()] ?: 0L
         _hourlySteps.value = hourly.toList()
+        _weightKg.value = weightKgValue
+        _heightCm.value = heightCmValue
+        _showCalories.value = showCaloriesValue
     }
 
     /** Muestrea CMPedometer (pasos de HOY) y acumula deltas, como hace Android con el sensor. */
@@ -161,7 +176,7 @@ class IosJourneyRepository(private val settings: Settings) : JourneyRepository {
             direction = activeDirectionValue,
             journeyStartEpochDay = journeyStartEpochDay,
             todayEpochDay = today().epochDay(),
-            todayKm = stepsToKm(_todaySteps.value),
+            todayKm = stepsToKm(_todaySteps.value, heightCmValue),
             lastCheckpoint = eventCheckpointValue,
             seen = eventSeenValue,
         ) ?: return
@@ -215,6 +230,18 @@ class IosJourneyRepository(private val settings: Settings) : JourneyRepository {
         eventPendingValue = null; persist(); _eventPending.value = null
     }
 
+    override suspend fun setWeightKg(kg: Int) {
+        weightKgValue = kg.coerceIn(WEIGHT_RANGE); persist(); _weightKg.value = weightKgValue
+    }
+
+    override suspend fun setHeightCm(cm: Int) {
+        heightCmValue = cm.coerceIn(HEIGHT_RANGE); persist(); _heightCm.value = heightCmValue
+    }
+
+    override suspend fun setShowCalories(show: Boolean) {
+        showCaloriesValue = show; persist(); _showCalories.value = show
+    }
+
     private fun persist() {
         settings["accumulated_steps"] = accumulated
         settings["ios_today_baseline"] = todayBaselineCount
@@ -230,6 +257,9 @@ class IosJourneyRepository(private val settings: Settings) : JourneyRepository {
         settings["event_seen"] = eventSeenValue.joinToString(",")
         settings["event_checkpoint"] = eventCheckpointValue.toLong()
         settings["event_pending"] = eventPendingValue ?: ""
+        settings["body_weight_kg"] = weightKgValue
+        settings["body_height_cm"] = heightCmValue
+        settings["show_calories"] = showCaloriesValue
     }
 
     private fun serializeDaily(map: Map<Long, Long>): String =

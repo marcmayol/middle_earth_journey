@@ -27,6 +27,14 @@ interface JourneyRepository {
     val eventCheckpoint: StateFlow<Int>
     val eventPending: StateFlow<String?>
 
+    // ---- Perfil corporal (Ajustes) ----
+    /** Peso en kg; usado para estimar calorías. */
+    val weightKg: StateFlow<Int>
+    /** Altura en cm; determina la zancada (y por tanto los km del viaje) y afina las calorías. */
+    val heightCm: StateFlow<Int>
+    /** ¿Mostrar la quema de calorías en la app? (activado por defecto). */
+    val showCalories: StateFlow<Boolean>
+
     /** ¿La plataforma expone un contador de pasos? */
     val hasSensor: Boolean
 
@@ -35,4 +43,8 @@ interface JourneyRepository {
     suspend fun markCineSeen(indices: Set<Int>)
     suspend fun applyEventResolution(checkpoint: Int, seen: List<String>, pending: String?)
     suspend fun clearEventPending()
+
+    suspend fun setWeightKg(kg: Int)
+    suspend fun setHeightCm(cm: Int)
+    suspend fun setShowCalories(show: Boolean)
 }

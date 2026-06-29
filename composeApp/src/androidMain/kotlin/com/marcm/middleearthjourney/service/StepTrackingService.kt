@@ -54,7 +54,7 @@ class StepTrackingService : Service() {
         // muestre pasos/km al arrancar y no se quede en "Contando tus pasos…".
         val (t0, x0) = notifContent(
             repo.journeySteps.value, repo.todaySteps.value,
-            repo.activeRoute.value, repo.activeDirection.value,
+            repo.activeRoute.value, repo.activeDirection.value, repo.heightCm.value,
         )
         val initial = buildNotification(t0, x0)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -83,8 +83,9 @@ class StepTrackingService : Service() {
                     repo.todaySteps,
                     repo.activeRoute,
                     repo.activeDirection,
-                ) { steps, today, route, direction ->
-                    notifContent(steps, today, route, direction)
+                    repo.heightCm,
+                ) { steps, today, route, direction, height ->
+                    notifContent(steps, today, route, direction, height)
                 }.collectLatest { (title, text) ->
                     val nm = getSystemService(NotificationManager::class.java)
                     nm.notify(NOTIF_ID, buildNotification(title, text))
@@ -200,14 +201,14 @@ class StepTrackingService : Service() {
     }
 
     /** Título («Hoy: N pasos · K km») y texto (tramo actual → siguiente) de la notificación. */
-    private fun notifContent(steps: Long, today: Long, route: RouteId, direction: Direction): Pair<String, String> {
+    private fun notifContent(steps: Long, today: Long, route: RouteId, direction: Direction, heightCm: Int): Pair<String, String> {
         val routeDef = Routes.byId(route)
         val waypoints = routeDef.orientedWaypoints(direction)
-        val journeyKm = stepsToKm(steps)
+        val journeyKm = stepsToKm(steps, heightCm)
         val idx = Routes.currentWaypointIndex(waypoints, journeyKm)
         val current = waypoints[idx]
         val next = waypoints.getOrNull(idx + 1)
-        val todayKmText = String.format("%.2f", stepsToKm(today))
+        val todayKmText = String.format("%.2f", stepsToKm(today, heightCm))
         val title = "Hoy: $today pasos · $todayKmText km"
         val text = if (next != null) {
             val remaining = (next.distanceKm - journeyKm).coerceAtLeast(0.0)

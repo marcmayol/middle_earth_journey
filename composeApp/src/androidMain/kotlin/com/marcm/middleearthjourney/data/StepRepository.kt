@@ -7,6 +7,7 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -43,6 +44,9 @@ private object Keys {
     val HC_ENABLED = booleanPreferencesKey("hc_enabled")
     val HC_ANCHOR_MILLIS = longPreferencesKey("hc_anchor_millis")
     val HC_ANCHOR_OFFSET = longPreferencesKey("hc_anchor_offset")
+    val WEIGHT_KG = intPreferencesKey("body_weight_kg")
+    val HEIGHT_CM = intPreferencesKey("body_height_cm")
+    val SHOW_CALORIES = booleanPreferencesKey("show_calories")
 }
 
 private const val DAILY_HISTORY_MAX_DAYS = 730L
@@ -125,6 +129,20 @@ class StepRepository(private val appContext: Context) : SensorEventListener, Jou
 
     private val _usingHealthConnect = MutableStateFlow(false)
     val usingHealthConnect: StateFlow<Boolean> = _usingHealthConnect
+
+    // ---- Perfil corporal (peso/altura) y preferencia de calorías ----
+    @Volatile private var weightKgValue: Int = DEFAULT_WEIGHT_KG
+    @Volatile private var heightCmValue: Int = DEFAULT_HEIGHT_CM
+    @Volatile private var showCaloriesValue: Boolean = true
+
+    private val _weightKg = MutableStateFlow(DEFAULT_WEIGHT_KG)
+    override val weightKg: StateFlow<Int> = _weightKg
+
+    private val _heightCm = MutableStateFlow(DEFAULT_HEIGHT_CM)
+    override val heightCm: StateFlow<Int> = _heightCm
+
+    private val _showCalories = MutableStateFlow(true)
+    override val showCalories: StateFlow<Boolean> = _showCalories
 
     /** ¿Hay Health Connect utilizable en este dispositivo? (para ofrecer activarlo en la UI) */
     val healthConnectAvailable: Boolean get() = healthConnect.isAvailable()
@@ -216,6 +234,12 @@ class StepRepository(private val appContext: Context) : SensorEventListener, Jou
         hcAnchorMillis = prefs[Keys.HC_ANCHOR_MILLIS] ?: -1L
         hcAnchorOffset = prefs[Keys.HC_ANCHOR_OFFSET] ?: 0L
         _usingHealthConnect.value = hcEnabled
+        weightKgValue = (prefs[Keys.WEIGHT_KG] ?: DEFAULT_WEIGHT_KG).coerceIn(WEIGHT_RANGE)
+        heightCmValue = (prefs[Keys.HEIGHT_CM] ?: DEFAULT_HEIGHT_CM).coerceIn(HEIGHT_RANGE)
+        showCaloriesValue = prefs[Keys.SHOW_CALORIES] ?: true
+        _weightKg.value = weightKgValue
+        _heightCm.value = heightCmValue
+        _showCalories.value = showCaloriesValue
         publishJourney()
         // En modo HC mostramos al menos el progreso preservado hasta que llegue el primer
         // refresco real (evita un parpadeo a 0 al abrir la app).
@@ -459,6 +483,27 @@ class StepRepository(private val appContext: Context) : SensorEventListener, Jou
         persist()
     }
 
+    override suspend fun setWeightKg(kg: Int) {
+        ensureLoaded()
+        weightKgValue = kg.coerceIn(WEIGHT_RANGE)
+        _weightKg.value = weightKgValue
+        persist()
+    }
+
+    override suspend fun setHeightCm(cm: Int) {
+        ensureLoaded()
+        heightCmValue = cm.coerceIn(HEIGHT_RANGE)
+        _heightCm.value = heightCmValue
+        persist()
+    }
+
+    override suspend fun setShowCalories(show: Boolean) {
+        ensureLoaded()
+        showCaloriesValue = show
+        _showCalories.value = show
+        persist()
+    }
+
     private fun persist(markMigrated: Boolean = false) {
         val snapshotAccumulated = accumulated
         val snapshotLast = lastSensorValue
@@ -477,6 +522,9 @@ class StepRepository(private val appContext: Context) : SensorEventListener, Jou
         val snapshotHcEnabled = hcEnabled
         val snapshotHcAnchorMillis = hcAnchorMillis
         val snapshotHcAnchorOffset = hcAnchorOffset
+        val snapshotWeight = weightKgValue
+        val snapshotHeight = heightCmValue
+        val snapshotShowCalories = showCaloriesValue
         scope.launch {
             appContext.dataStore.edit { prefs ->
                 prefs[Keys.ACCUMULATED] = snapshotAccumulated
@@ -496,6 +544,9 @@ class StepRepository(private val appContext: Context) : SensorEventListener, Jou
                 prefs[Keys.HC_ENABLED] = snapshotHcEnabled
                 if (snapshotHcAnchorMillis >= 0L) prefs[Keys.HC_ANCHOR_MILLIS] = snapshotHcAnchorMillis
                 prefs[Keys.HC_ANCHOR_OFFSET] = snapshotHcAnchorOffset
+                prefs[Keys.WEIGHT_KG] = snapshotWeight
+                prefs[Keys.HEIGHT_CM] = snapshotHeight
+                prefs[Keys.SHOW_CALORIES] = snapshotShowCalories
                 if (markMigrated) prefs[Keys.MIGRATED_DAILY_V1] = true
             }
         }

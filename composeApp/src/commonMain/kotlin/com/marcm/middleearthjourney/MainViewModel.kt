@@ -12,6 +12,9 @@ import com.marcm.middleearthjourney.data.Quotes
 import com.marcm.middleearthjourney.data.RouteId
 import com.marcm.middleearthjourney.data.Routes
 import com.marcm.middleearthjourney.data.Waypoint
+import com.marcm.middleearthjourney.data.DEFAULT_HEIGHT_CM
+import com.marcm.middleearthjourney.data.DEFAULT_WEIGHT_KG
+import com.marcm.middleearthjourney.data.caloriesBurned
 import com.marcm.middleearthjourney.data.stepsToKm
 import com.marcm.middleearthjourney.util.dateFromEpochDay
 import com.marcm.middleearthjourney.util.dayOfWeekFromMondayIndex
@@ -30,6 +33,30 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
+import kotlin.math.roundToLong
+
+/** Perfil corporal + preferencia de calorías (de los ajustes). */
+private data class Settings(
+    val weightKg: Int,
+    val heightCm: Int,
+    val showCalories: Boolean,
+)
+
+/** Entradas del repositorio que alimentan [JourneyState]. */
+private data class JourneyInputs(
+    val steps: Long,
+    val startEpoch: Long?,
+    val today: Long,
+    val route: RouteId,
+    val direction: Direction,
+)
+
+/** Entradas del repositorio que alimentan [StatsState]. */
+private data class StatsInputs(
+    val daily: Map<Long, Long>,
+    val hourly: List<Long>,
+    val journeySteps: Long,
+)
 
 data class JourneyState(
     val steps: Long,
@@ -53,6 +80,8 @@ data class JourneyState(
     val avgKmPerDay: Double,
     val todaySteps: Long,
     val todayKm: Double,
+    val todayCalories: Long,
+    val showCalories: Boolean,
     val routeId: RouteId,
     val direction: Direction,
     val routeTitle: String,
@@ -81,6 +110,12 @@ data class StatsState(
     val firstDayWithData: LocalDate?,
     val todaySteps: Long,
     val hourlySteps: List<Long>,
+    val caloriesEnabled: Boolean,
+    val journeyCalories: Long,
+    val todayCalories: Long,
+    val weekCalories: Long,
+    val monthCalories: Long,
+    val yearCalories: Long,
 ) {
     companion object {
         val EMPTY = StatsState(
@@ -101,6 +136,12 @@ data class StatsState(
             firstDayWithData = null,
             todaySteps = 0L,
             hourlySteps = List(24) { 0L },
+            caloriesEnabled = true,
+            journeyCalories = 0L,
+            todayCalories = 0L,
+            weekCalories = 0L,
+            monthCalories = 0L,
+            yearCalories = 0L,
         )
     }
 }
@@ -124,25 +165,54 @@ class MainViewModel(private val repo: JourneyRepository) : ViewModel() {
         viewModelScope.launch { repo.markCineSeen(indices) }
     }
 
-    val state: StateFlow<JourneyState> = combine(
+    /** Perfil corporal + preferencia de calorías, combinados para alimentar los estados. */
+    private val settingsFlow: StateFlow<Settings> = combine(
+        repo.weightKg,
+        repo.heightCm,
+        repo.showCalories,
+    ) { weight, height, showCalories ->
+        Settings(weight, height, showCalories)
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.Eagerly,
+        Settings(DEFAULT_WEIGHT_KG, DEFAULT_HEIGHT_CM, true),
+    )
+
+    private val journeyInputs: StateFlow<JourneyInputs> = combine(
         repo.journeySteps,
         repo.journeyStart,
         repo.todaySteps,
         repo.activeRoute,
         repo.activeDirection,
     ) { steps, startEpoch, today, route, direction ->
-        buildState(steps, startEpoch, today, route, direction)
+        JourneyInputs(steps, startEpoch, today, route, direction)
     }.stateIn(
         viewModelScope,
         SharingStarted.Eagerly,
-        buildState(0L, null, 0L, RouteId.FRODO, Direction.FORWARD),
+        JourneyInputs(0L, null, 0L, RouteId.FRODO, Direction.FORWARD),
     )
 
-    val stats: StateFlow<StatsState> = combine(
+    val state: StateFlow<JourneyState> = combine(journeyInputs, settingsFlow) { input, settings ->
+        buildState(input, settings)
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.Eagerly,
+        buildState(
+            JourneyInputs(0L, null, 0L, RouteId.FRODO, Direction.FORWARD),
+            Settings(DEFAULT_WEIGHT_KG, DEFAULT_HEIGHT_CM, true),
+        ),
+    )
+
+    private val statsInputs: StateFlow<StatsInputs> = combine(
         repo.dailySteps,
         repo.hourlySteps,
-    ) { daily, hourly ->
-        buildStats(daily, hourly)
+        repo.journeySteps,
+    ) { daily, hourly, journey ->
+        StatsInputs(daily, hourly, journey)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, StatsInputs(emptyMap(), List(24) { 0L }, 0L))
+
+    val stats: StateFlow<StatsState> = combine(statsInputs, settingsFlow) { input, settings ->
+        buildStats(input, settings)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, StatsState.EMPTY)
 
     /** Suceso aleatorio pendiente de mostrar (popup), o null. */
@@ -167,17 +237,35 @@ class MainViewModel(private val repo: JourneyRepository) : ViewModel() {
         viewModelScope.launch { repo.clearEventPending() }
     }
 
-    private fun buildState(
-        steps: Long,
-        startEpoch: Long?,
-        todayStepsValue: Long,
-        routeId: RouteId,
-        direction: Direction,
-    ): JourneyState {
+    // ---- Ajustes del perfil corporal ----
+    val weightKg: StateFlow<Int> = repo.weightKg
+    val heightCm: StateFlow<Int> = repo.heightCm
+    val showCalories: StateFlow<Boolean> = repo.showCalories
+
+    fun setWeightKg(kg: Int) {
+        viewModelScope.launch { repo.setWeightKg(kg) }
+    }
+
+    fun setHeightCm(cm: Int) {
+        viewModelScope.launch { repo.setHeightCm(cm) }
+    }
+
+    fun setShowCalories(show: Boolean) {
+        viewModelScope.launch { repo.setShowCalories(show) }
+    }
+
+    private fun buildState(input: JourneyInputs, settings: Settings): JourneyState {
+        val steps = input.steps
+        val startEpoch = input.startEpoch
+        val todayStepsValue = input.today
+        val routeId = input.route
+        val direction = input.direction
+        val height = settings.heightCm
+        val weight = settings.weightKg
         val route = Routes.byId(routeId)
         val waypoints = route.orientedWaypoints(direction)
         val achievements = route.orientedAchievements(direction)
-        val km = stepsToKm(steps)
+        val km = stepsToKm(steps, height)
         val total = route.totalKm
         val progress = (km / total).toFloat().coerceIn(0f, 1f)
         val idx = Routes.currentWaypointIndex(waypoints, km)
@@ -233,7 +321,9 @@ class MainViewModel(private val repo: JourneyRepository) : ViewModel() {
             daysElapsed = daysElapsed,
             avgKmPerDay = avgKmPerDay,
             todaySteps = todayStepsValue,
-            todayKm = stepsToKm(todayStepsValue),
+            todayKm = stepsToKm(todayStepsValue, height),
+            todayCalories = caloriesBurned(todayStepsValue, weight, height).roundToLong(),
+            showCalories = settings.showCalories,
             routeId = routeId,
             direction = direction,
             routeTitle = route.title,
@@ -261,7 +351,12 @@ class MainViewModel(private val repo: JourneyRepository) : ViewModel() {
         }
     }
 
-    private fun buildStats(daily: Map<Long, Long>, hourly: List<Long>): StatsState {
+    private fun buildStats(input: StatsInputs, settings: Settings): StatsState {
+        val daily = input.daily
+        val hourly = input.hourly
+        val weight = settings.weightKg
+        val height = settings.heightCm
+        fun kcal(steps: Long): Long = caloriesBurned(steps, weight, height).roundToLong()
         val now = today()
         val weekStart = mondayOf(now)
         val weekly = (0..6).map { offset ->
@@ -324,6 +419,12 @@ class MainViewModel(private val repo: JourneyRepository) : ViewModel() {
             firstDayWithData = firstDay,
             todaySteps = daily[now.epochDay()] ?: 0L,
             hourlySteps = hourly,
+            caloriesEnabled = settings.showCalories,
+            journeyCalories = kcal(input.journeySteps),
+            todayCalories = kcal(daily[now.epochDay()] ?: 0L),
+            weekCalories = kcal(weeklyTotal),
+            monthCalories = kcal(currentMonthSteps),
+            yearCalories = kcal(currentYearSteps),
         )
     }
 

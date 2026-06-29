@@ -60,8 +60,6 @@ data class RouteDef(
 
 object Routes {
 
-    const val METERS_PER_STEP: Double = 0.7
-
     val FRODO: RouteDef = RouteDef(
         id = RouteId.FRODO,
         title = "La marcha de Frodo",
@@ -291,5 +289,3 @@ object Routes {
         return 0
     }
 }
-
-fun stepsToKm(steps: Long): Double = steps * Routes.METERS_PER_STEP / 1000.0

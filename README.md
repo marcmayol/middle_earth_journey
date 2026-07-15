@@ -4,6 +4,14 @@ App personal que convierte tus **pasos diarios** en avance por una **ruta de la 
 Media** (El Señor de los Anillos / El Hobbit). Cada paso real te acerca a tu destino. No
 hay competición: es un viaje personal con tono de diario. Todo el texto está en **español**.
 
+## Descargar (Android)
+
+**➡️ [Descargar APK — v1.0 (debug)](https://github.com/marcmayol/middle_earth_journey/releases/tag/v1.0-debug)**
+
+Descarga el archivo `.apk` desde la [release v1.0-debug](https://github.com/marcmayol/middle_earth_journey/releases/tag/v1.0-debug)
+e instálalo en el móvil (Android 8+). Necesitarás activar *"instalar apps de origen desconocido"*.
+Es una build **debug**, así que se instala como app independiente (`applicationId` con sufijo `.debug`).
+
 ## Qué hace
 
 - Cuenta los pasos del día (podómetro del sistema) y los convierte en kilómetros

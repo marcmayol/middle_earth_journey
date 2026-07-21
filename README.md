@@ -4,6 +4,20 @@ App personal que convierte tus **pasos diarios** en avance por una **ruta de la 
 Media** (El Señor de los Anillos / El Hobbit). Cada paso real te acerca a tu destino. No
 hay competición: es un viaje personal con tono de diario. Todo el texto está en **español**.
 
+## Capturas
+
+| Misión | Mapa | Crónicas | Stats | Logros |
+|:---:|:---:|:---:|:---:|:---:|
+| <img src="docs/screenshots/01-mision.png" width="170"> | <img src="docs/screenshots/02-mapa.png" width="170"> | <img src="docs/screenshots/03-cronicas.png" width="170"> | <img src="docs/screenshots/04-stats.png" width="170"> | <img src="docs/screenshots/05-logros.png" width="170"> |
+| Pasos de hoy y progreso | Carta de la Tierra Media | Capítulos narrados | Semana, mes y año | 7 / 15 desbloqueados |
+
+Y las **cinemáticas**, que se dibujan trazo a trazo sobre pergamino mientras la voz narra:
+
+<img src="docs/screenshots/06-cinematica.png" width="220">
+
+> Capturas tomadas en un emulador con un viaje de ejemplo (202 días, ~1,96 M de pasos),
+> no con datos reales.
+
 ## Qué hace
 
 - Cuenta los pasos del día (podómetro del sistema) y los convierte en kilómetros

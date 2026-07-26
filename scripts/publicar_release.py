@@ -181,16 +181,16 @@ def generar_manifiesto(vc: int, vn: str, sha: str, notas: str) -> dict:
         "check_horas": _CHECK_HORAS,
     }
 
-def version_code_publicado() -> int | None:
-    """versionCode que sirve ahora mismo la URL pública (None si aún no hay ninguno).
+def manifiesto_publicado() -> dict | None:
+    """El manifiesto que sirve ahora mismo la URL pública (None si aún no hay).
 
-    Se lee de la red y no de git a propósito: lo que importa es lo que las apps
-    instaladas ven. El working tree no vale porque un --dry-run previo ya lo ha
-    reescrito con la versión que preparamos, y el manifiesto commiteado tampoco,
-    porque puede haberse commiteado antes de llegar a publicarse."""
+    Se lee de la red y no de git a propósito: lo que importa es lo que ven las apps
+    instaladas. El working tree no vale porque un --dry-run previo ya lo ha reescrito
+    con la versión que preparamos, y el manifiesto commiteado tampoco, porque puede
+    haberse commiteado antes de llegar a publicarse."""
     try:
         with urllib.request.urlopen(_PAGES_URL, timeout=15) as r:
-            return int(json.loads(r.read().decode("utf-8"))["versionCode"])
+            return json.loads(r.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         if e.code == 404:
             return None  # primera publicación: no hay manifiesto que superar
@@ -221,12 +221,23 @@ def verificar_coherencia(vc_declarado: int, apk: Path, manifiesto: dict) -> None
     if manifiesto["sha256"] != sha256(apk):
         raise SystemExit("El sha256 del manifiesto no coincide con el APK construido.")
 
-    publicado = version_code_publicado()
-    if publicado is not None and vc_declarado <= publicado:
-        raise SystemExit(
-            f"El versionCode {vc_declarado} no supera al ya publicado ({publicado}): "
-            "nadie detectaría la actualización. Sube el versionCode. Aborto."
+    publicado = manifiesto_publicado()
+    if publicado is not None and vc_declarado <= int(publicado["versionCode"]):
+        # Repetir la MISMA versión bit a bit es reanudar una publicación a medias
+        # (el proceso se cortó entre el manifiesto y la Release), no publicar de
+        # nuevo: no engaña a nadie y hace el script reintentable.
+        mismo = (
+            vc_declarado == int(publicado["versionCode"])
+            and publicado.get("sha256") == manifiesto["sha256"]
         )
+        if not mismo:
+            raise SystemExit(
+                f"El versionCode {vc_declarado} no supera al ya publicado "
+                f"({publicado['versionCode']}): nadie detectaría la actualización. "
+                "Sube el versionCode. Aborto."
+            )
+        print(f"Reanudando la publicación de la v{manifiesto['versionName']}: "
+              "el manifiesto ya está servido y apunta a este mismo APK.")
 
     huella = huella_firma(apk)
     if huella is None:
@@ -290,17 +301,33 @@ def verificar_rama() -> None:
             "antes de publicar. Aborto."
         )
 
+def _release_existe(vn: str) -> bool:
+    return subprocess.call(
+        ["gh", "release", "view", f"v{vn}", "--repo", _REPO],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    ) == 0
+
 def publicar(apk: Path, manifiesto: dict, notas: str) -> None:
     vn = manifiesto["versionName"]
     asset = _asset_con_nombre(apk, vn)
-    _ejecutar([
-        "gh", "release", "create", f"v{vn}", str(asset),
-        "--repo", _REPO,
-        "--title", f"{_TITULO} {vn}",
-        "--notes", notas or f"{_TITULO} {vn}.",
-    ])
+    if _release_existe(vn):
+        # Reanudación: la Release quedó creada en un intento anterior. Se resube el
+        # APK para garantizar que el asset es el del sha256 que anuncia el manifiesto.
+        print(f"La Release v{vn} ya existe: resubo el APK.")
+        _ejecutar(["gh", "release", "upload", f"v{vn}", str(asset),
+                   "--repo", _REPO, "--clobber"])
+    else:
+        _ejecutar([
+            "gh", "release", "create", f"v{vn}", str(asset),
+            "--repo", _REPO,
+            "--title", f"{_TITULO} {vn}",
+            "--notes", notas or f"{_TITULO} {vn}.",
+        ])
     _ejecutar(["git", "add", str(MANIFIESTO), str(FIRMA_ESPERADA)])
-    _ejecutar(["git", "commit", "-m", f"Publica el manifiesto de la v{vn}"])
+    if _salida(["git", "diff", "--cached", "--name-only"]).strip():
+        _ejecutar(["git", "commit", "-m", f"Publica el manifiesto de la v{vn}"])
+    else:
+        print("El manifiesto ya estaba commiteado sin cambios: no hay nada que commitear.")
     _ejecutar(["git", "push", "origin", _RAMA])
 
 def verificar_url_publica(vc_esperado: int, intentos: int = 30, espera_s: int = 10) -> None:

@@ -51,6 +51,17 @@ instalada si la versión nueva lleva la misma firma, así que:
 | `versionCode` > el que sirve la URL pública | Con un número igual o menor, nadie detectaría la actualización. Se compara contra el manifiesto **publicado** (leído de la red), no contra el del repo: el del repo puede estar commiteado sin haber llegado a publicarse |
 | Huella de firma == `firma_esperada.txt` | Una firma distinta rompe la actualización de todas las instalaciones |
 
+## Si la publicación se corta a medias
+
+Pasó: un BSOD tumbó el PC entre el manifiesto y la Release. **Vuelve a lanzar el mismo
+comando**, el script es reanudable y retoma donde estuviera:
+
+- Repetir una versión ya anunciada solo se permite si el APK es **el mismo bit a bit**
+  (mismo `versionCode` **y** mismo `sha256`); con un APK distinto y el mismo número,
+  aborta.
+- Si la Release ya existe, resube el APK (`--clobber`) en vez de fallar.
+- Si el manifiesto ya estaba commiteado sin cambios, no intenta commitear.
+
 ## Detalles que conviene recordar
 
 - **La primera auto-actualización pide confirmación.** Android solo instala en silencio

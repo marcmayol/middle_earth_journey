@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.multiplatform)
     alias(libs.plugins.android.application)
@@ -76,12 +78,41 @@ android {
         versionCode = 1
         versionName = "1.0"
     }
+    // Firma de release. Los datos salen de keystore.properties (raíz del proyecto, fuera
+    // del control de versiones); el script de publicación lo genera desde variables de
+    // entorno si no está. Sin él no se firma nada: más vale un APK sin firmar y un error
+    // claro que un APK firmado con una clave que no es la de la app publicada.
+    val keystoreProps = Properties().apply {
+        val f = rootProject.file("keystore.properties")
+        if (f.exists()) f.inputStream().use { load(it) }
+    }
+    val hayFirma = keystoreProps.getProperty("storeFile") != null
+
+    signingConfigs {
+        if (hayFirma) {
+            create("release") {
+                storeFile = file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         getByName("debug") {
             applicationIdSuffix = ".debug"
         }
         getByName("release") {
             isMinifyEnabled = false
+            if (hayFirma) {
+                signingConfig = signingConfigs.getByName("release")
+            } else {
+                logger.warn(
+                    "AVISO: falta keystore.properties; el APK de release saldrá SIN FIRMAR " +
+                        "y no servirá para actualizar la app instalada.",
+                )
+            }
         }
     }
     compileOptions {

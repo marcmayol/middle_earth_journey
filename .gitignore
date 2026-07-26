@@ -25,6 +25,11 @@ iosApp/Pods/
 iosApp/build/
 Pods/
 
+# Firma de release: la keystore vive fuera del repo y sus contraseñas también.
+# Nada de esto se versiona jamás (perder la clave = no poder actualizar la app).
+keystore.properties
+*.jks
+
 # Misc
 *.log
 *.keystore

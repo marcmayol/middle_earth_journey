@@ -21,3 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "MiddleEarthJourney"
 include(":composeApp")
+include(":actualizador")

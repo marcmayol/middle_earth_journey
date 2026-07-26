@@ -33,3 +33,6 @@ androidx-health-connect = { module = "androidx.health.connect:connect-client", v
 multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 android-application = { id = "com.android.application", version.ref = "agp" }
 compose = { id = "org.jetbrains.compose", version.ref = "compose" }
+# Para el módulo :actualizador, que es una librería Android pura (no multiplataforma).
+android-library = { id = "com.android.library", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }

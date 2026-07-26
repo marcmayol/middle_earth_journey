@@ -21,9 +21,17 @@ class Actualizador(
     private val app: Application,
     val config: ActualizadorConfig,
     private val cliente: ClienteManifiesto = ClienteManifiesto(HttpUrlConnectionTransport()),
-    private val descargador: Descargador = Descargador(),
+    descargador: Descargador = Descargador(),
+    instalador: InstaladorApk = InstaladorAndroid(app),
 ) {
     private val prefs = PrefsActualizador(app)
+
+    /** Todo lo que va de la descarga a la instalación vive aquí (y es testable en JVM). */
+    private val motor = MotorActualizacion(
+        dirDescargas = File(app.cacheDir, "actualizaciones"),
+        instalador = instalador,
+        descargador = descargador,
+    )
 
     // Scope propio del módulo: una descarga no se cancela por recomposición de la UI.
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -116,46 +124,14 @@ class Actualizador(
         }
 
         scope.launch {
-            val dir = File(app.cacheDir, "actualizaciones").apply { mkdirs() }
-            withContext(Dispatchers.IO) { limpiarCache(info.versionCode) }
-            val part = File(dir, "${info.versionCode}.apk.part")
-            val apk = File(dir, "${info.versionCode}.apk")
+            when (val res = motor.aplicar(info) { _estado.value = it }) {
+                is ResultadoInstalacion.Lanzada ->
+                    // Por sesión, el resultado final llega por EventosInstalacion; por
+                    // intent no llega nada y lo resuelve onPermisoQuizaConcedido().
+                    instalacionDelegada = res.via == Via.INTENT
 
-            // Un APK ya descargado y verificado se reutiliza: pasa si el proceso murió
-            // justo antes de instalar o si el usuario canceló la confirmación del
-            // sistema. Si el hash ya no cuadra, verificarOBorrar lo borra y se rebaja.
-            val listo = withContext(Dispatchers.IO) {
-                apk.isFile && VerificadorSha.verificarOBorrar(apk, info.sha256)
-            }
-
-            if (!listo) {
-                _estado.value = EstadoActualizacion.Descargando(0)
-                val res = descargador.descargar(info.url, part) { pct ->
-                    _estado.value = EstadoActualizacion.Descargando(pct)
-                }
-                if (res !is ResultadoDescarga.Ok) {
-                    _estado.value = EstadoActualizacion.Error(TipoError.DESCARGA)
-                    return@launch
-                }
-
-                _estado.value = EstadoActualizacion.Verificando
-                if (!VerificadorSha.verificarOBorrar(part, info.sha256)) {
-                    _estado.value = EstadoActualizacion.Error(TipoError.HASH)
-                    return@launch
-                }
-                // El .apk definitivo solo nace tras verificar: nunca hay un APK
-                // instalable sin comprobar en disco.
-                apk.delete()
-                part.renameTo(apk)
-            }
-
-            _estado.value = EstadoActualizacion.Instalando
-            try {
-                instalacionDelegada = Instalador.instalar(app, apk) == Instalador.Via.INTENT
-                // Por sesión, el resultado final llega por EventosInstalacion; por
-                // intent no llega nada y lo resuelve onPermisoQuizaConcedido().
-            } catch (e: Exception) {
-                _estado.value = EstadoActualizacion.Error(TipoError.INSTALACION, e.message)
+                is ResultadoInstalacion.Fallo ->
+                    _estado.value = EstadoActualizacion.Error(res.tipo, res.mensaje)
             }
         }
     }

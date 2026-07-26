@@ -80,7 +80,7 @@ var buscar = actualizador.buscarAutomaticamente                    // ajuste (de
   detalles → Instalar de todas formas*. Ocurre una sola vez por dispositivo y no
   depende de este módulo.
 - **Respaldo**: si la sesión de `PackageInstaller` no se puede crear o confirmar, se
-  cae al intent clásico de instalación con `FileProvider` (`Instalador.Via.INTENT`).
+  cae al intent clásico de instalación con `FileProvider` (`Via.INTENT`).
   Esa vía no devuelve resultado, así que el estado `Instalando` se deshace en el
   siguiente `onPermisoQuizaConcedido()`; si la instalación sí ocurrió, el proceso se
   reinicia y el `init` limpia el estado al comparar `versionCode`.
@@ -96,13 +96,17 @@ var buscar = actualizador.buscarAutomaticamente                    // ajuste (de
 
 ## Testing
 
-Todo lo testeable sin dispositivo está cubierto en `src/test` (25 tests JVM, sin red
-real: `Transport` y `AbridorConexion` son interfaces funcionales y los tests inyectan
-dobles en memoria): comparación de versiones, parseo del manifiesto (versión
-mayor/igual, JSON roto, HTTP ≠ 200, sin red), verificación SHA (hash
+Todo lo testeable sin dispositivo está cubierto en `src/test` (31 tests JVM, sin red
+real: `Transport`, `AbridorConexion` e `InstaladorApk` son interfaces funcionales y los
+tests inyectan dobles en memoria): comparación de versiones, parseo del manifiesto
+(versión mayor/igual, JSON roto, HTTP ≠ 200, sin red), verificación SHA (hash
 correcto/incorrecto), descarga con progreso y borrado ante error, limpieza de la
-caché de descargas, y las decisiones "auto calla / manual informa".
-`Instalador` y `ComprobacionWorker` dependen del framework y se validan en dispositivo.
+caché de descargas, las decisiones "auto calla / manual informa", y el flujo completo
+de `MotorActualizacion` (hash correcto llega a instalar, hash incorrecto no, reutilización
+de un APK ya verificado y propagación de la vía de instalación).
+
+`InstaladorAndroid` (la sesión de `PackageInstaller` de verdad) y `ComprobacionWorker`
+dependen del framework y se validan en dispositivo.
 
 ```bash
 gradlew.bat :actualizador:testDebugUnitTest

@@ -10,6 +10,28 @@ import android.provider.Settings
 import androidx.core.content.FileProvider
 import java.io.File
 
+/** Camino por el que finalmente se lanzó la instalación. */
+enum class Via {
+    /** Sesión de PackageInstaller: el resultado llegará a [InstallResultReceiver]. */
+    SESION,
+
+    /** Intent + FileProvider: lo gestiona el instalador del sistema, sin callback. */
+    INTENT,
+}
+
+/**
+ * Instalación de un APK ya descargado y verificado, vista desde el motor: solo un
+ * fichero y la vía por la que se lanzó. Sin `Context`, para poder doblarla en tests JVM.
+ */
+fun interface InstaladorApk {
+    fun instalar(apk: File): Via
+}
+
+/** Implementación real: delega en [Instalador] con el contexto de la app. */
+class InstaladorAndroid(private val context: Context) : InstaladorApk {
+    override fun instalar(apk: File): Via = Instalador.instalar(context, apk)
+}
+
 /**
  * Instalación del APK ya descargado y verificado.
  *
@@ -32,17 +54,12 @@ import java.io.File
  * intent clásico de instalación con [FileProvider], que siempre muestra el diálogo
  * del sistema. La diferencia importa para la UI: la sesión avisa del resultado por
  * [InstallResultReceiver], el intent no avisa de nada (ver [Via]).
+ *
+ * Lo que el motor necesita de aquí está detrás de [InstaladorApk], que no habla de
+ * Android: así el flujo completo (descarga → verificación → instalación) se puede
+ * probar en la JVM con un doble, sin dispositivo.
  */
 object Instalador {
-
-    /** Camino por el que finalmente se lanzó la instalación. */
-    enum class Via {
-        /** Sesión de PackageInstaller: el resultado llegará a [InstallResultReceiver]. */
-        SESION,
-
-        /** Intent + FileProvider: lo gestiona el instalador del sistema, sin callback. */
-        INTENT,
-    }
 
     /** ¿Tiene la app permiso para instalar APKs de orígenes desconocidos? */
     fun puedeInstalar(context: Context): Boolean =

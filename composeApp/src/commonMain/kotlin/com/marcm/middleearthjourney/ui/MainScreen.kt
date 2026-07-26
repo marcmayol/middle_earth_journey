@@ -98,6 +98,8 @@ fun MainScreen(
     onWeightChange: (Int) -> Unit = {},
     onHeightChange: (Int) -> Unit = {},
     onShowCaloriesChange: (Boolean) -> Unit = {},
+    updateBanner: @Composable () -> Unit = {},
+    updateSettings: @Composable () -> Unit = {},
 ) {
     var showChooser by rememberSaveable { mutableStateOf(false) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
@@ -146,6 +148,8 @@ fun MainScreen(
                         onAction = onRequestPermission,
                     )
                 }
+                // Aviso de versión nueva: no bloquea nada y solo aparece si la hay.
+                updateBanner()
                 when (selected) {
                     Tab.Mission -> MissionScreen(state = state, quote = quote, events = eventLog)
                     Tab.Map -> MapScreen(state = state, onSelectRoute = onSelectRoute)
@@ -203,6 +207,7 @@ fun MainScreen(
                 onHeightChange = onHeightChange,
                 onShowCaloriesChange = onShowCaloriesChange,
                 onClose = { showSettings = false },
+                updateSection = updateSettings,
             )
         }
     }

@@ -25,9 +25,18 @@ import kotlinx.coroutines.delay
  *
  * @param onRequestPermission acción de plataforma para pedir el permiso de actividad/pasos
  *        (en Android lanza el permiso ACTIVITY_RECOGNITION; en iOS, el de CoreMotion).
+ * @param updateBanner aviso de versión nueva, bajo la cabecera. Lo aporta la plataforma:
+ *        la auto-actualización solo existe en Android (fuera de Play Store), así que en
+ *        iOS este hueco se queda vacío y esta pantalla no sabe nada del actualizador.
+ * @param updateSettings sección de actualizaciones dentro de Ajustes, igual que el anterior.
  */
 @Composable
-fun App(viewModel: MainViewModel, onRequestPermission: () -> Unit = {}) {
+fun App(
+    viewModel: MainViewModel,
+    onRequestPermission: () -> Unit = {},
+    updateBanner: @Composable () -> Unit = {},
+    updateSettings: @Composable () -> Unit = {},
+) {
     AppTheme {
         val state by viewModel.state.collectAsState()
         val stats by viewModel.stats.collectAsState()
@@ -68,6 +77,8 @@ fun App(viewModel: MainViewModel, onRequestPermission: () -> Unit = {}) {
                 onWeightChange = { viewModel.setWeightKg(it) },
                 onHeightChange = { viewModel.setHeightCm(it) },
                 onShowCaloriesChange = { viewModel.setShowCalories(it) },
+                updateBanner = updateBanner,
+                updateSettings = updateSettings,
             )
             AnimatedVisibility(
                 visible = showSplash,

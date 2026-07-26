@@ -8,6 +8,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
@@ -19,6 +21,8 @@ import com.marcm.actualizador.Actualizador
 import com.marcm.actualizador.Modo
 import com.marcm.middleearthjourney.data.StepRepository
 import com.marcm.middleearthjourney.service.StepTrackingService
+import com.marcm.middleearthjourney.ui.UpdateBanner
+import com.marcm.middleearthjourney.ui.UpdateSettingsSection
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -69,7 +73,18 @@ class MainActivity : ComponentActivity() {
         ensureHealthConnect()
         buscarActualizacionAlAbrir()
         setContent {
-            App(viewModel = viewModel, onRequestPermission = { ensureActivityRecognitionPermission() })
+            val estadoActualizacion by actualizador.estado.collectAsState()
+            App(
+                viewModel = viewModel,
+                onRequestPermission = { ensureActivityRecognitionPermission() },
+                updateBanner = {
+                    UpdateBanner(
+                        estado = estadoActualizacion,
+                        onActualizar = { actualizador.actualizarAhora() },
+                    )
+                },
+                updateSettings = { UpdateSettingsSection(actualizador) },
+            )
         }
     }
 

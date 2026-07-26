@@ -58,6 +58,10 @@ import com.marcm.middleearthjourney.ui.pageBackgroundBrush
  * Pantalla de ajustes (overlay a pantalla completa). Permite editar el perfil corporal
  * (peso y altura) y activar/desactivar la quema de calorías. La altura define la zancada,
  * así que también afina los km del viaje.
+ *
+ * @param updateSection sección de actualizaciones, que aporta la plataforma (solo Android;
+ *        ver la documentación de `App`). Aquí es el único sitio donde una comprobación
+ *        informa de errores o de que ya estás al día.
  */
 @Composable
 fun SettingsScreen(
@@ -68,6 +72,7 @@ fun SettingsScreen(
     onHeightChange: (Int) -> Unit,
     onShowCaloriesChange: (Boolean) -> Unit,
     onClose: () -> Unit,
+    updateSection: @Composable () -> Unit = {},
 ) {
     Box(Modifier.fillMaxSize().background(pageBackgroundBrush())) {
         Column(
@@ -176,6 +181,9 @@ fun SettingsScreen(
             )
 
             Spacer(Modifier.height(28.dp))
+            updateSection()
+
+            Spacer(Modifier.height(28.dp))
             CodexCard(
                 modifier = Modifier.fillMaxWidth(),
                 brush = CardQuietBrush,
@@ -193,7 +201,8 @@ fun SettingsScreen(
                         Eyebrow("Privacidad")
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            "Recuerda que esta app es 100 % privada: ningún dato saldrá de tu dispositivo.",
+                            "Tus pasos, tu viaje y tu perfil no salen de este dispositivo. " +
+                                "Lo único que la app consulta fuera es si existe una versión nueva.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextBody,
                         )

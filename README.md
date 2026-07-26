@@ -28,13 +28,6 @@ e instálalo en el móvil (Android 8+). Necesitarás activar *"instalar apps de 
 A partir de la v1.1 la app **se actualiza sola**: consulta el manifiesto publicado y te
 avisa cuando hay versión nueva.
 
-> ⚠️ **Si vienes de la v1.0 (debug), tu viaje no se traslada solo.** Aquella iba firmada
-> con otra clave y con `applicationId` distinto (sufijo `.debug`), así que para Android
-> son **dos apps diferentes**: la v1.1 se instala al lado, empezando de cero, y
-> desinstalar la vieja se lleva por delante los pasos acumulados. Si te importa el
-> progreso, **migra los datos antes de desinstalar nada** (el estado vive en el DataStore
-> `frodo_steps` de la app antigua).
-
 ## Qué hace
 
 - Cuenta los pasos del día (podómetro del sistema) y los convierte en kilómetros

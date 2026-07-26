@@ -18,6 +18,18 @@ Y las **cinemáticas**, que se dibujan trazo a trazo sobre pergamino mientras la
 > Capturas tomadas en un emulador con un viaje de ejemplo (202 días, ~1,96 M de pasos),
 > no con datos reales.
 
+## Descargar (Android)
+
+**➡️ [Descargar APK — v1.1](https://github.com/marcmayol/middle_earth_journey/releases/latest)**
+
+Descarga el archivo `.apk` desde la [última release](https://github.com/marcmayol/middle_earth_journey/releases/latest)
+e instálalo en el móvil (Android 8+). Necesitarás activar *"instalar apps de origen desconocido"*.
+
+A partir de la v1.1 la app **se actualiza sola**: consulta el manifiesto publicado y te
+avisa cuando hay versión nueva. Ojo, quien tuviera instalada la v1.0 (debug) tiene que
+desinstalarla antes: iba firmada con otra clave y con `applicationId` distinto (sufijo
+`.debug`), así que Android no la considera la misma app.
+
 ## Qué hace
 
 - Cuenta los pasos del día (podómetro del sistema) y los convierte en kilómetros

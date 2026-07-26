@@ -30,6 +30,7 @@ import os
 import re
 import subprocess
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -181,19 +182,25 @@ def generar_manifiesto(vc: int, vn: str, sha: str, notas: str) -> dict:
     }
 
 def version_code_publicado() -> int | None:
-    """versionCode del último manifiesto COMMITEADO (None si es el primero).
+    """versionCode que sirve ahora mismo la URL pública (None si aún no hay ninguno).
 
-    Se lee de git y no del working tree a propósito: un --dry-run previo ya ha
-    reescrito docs/updates.json con la versión que estamos preparando, y compararse
-    contra sí misma abortaría siempre."""
-    ruta = MANIFIESTO.relative_to(RAIZ).as_posix()
-    salida = _salida(["git", "show", f"HEAD:{ruta}"])
-    if not salida.strip():
-        return None
+    Se lee de la red y no de git a propósito: lo que importa es lo que las apps
+    instaladas ven. El working tree no vale porque un --dry-run previo ya lo ha
+    reescrito con la versión que preparamos, y el manifiesto commiteado tampoco,
+    porque puede haberse commiteado antes de llegar a publicarse."""
     try:
-        return int(json.loads(salida)["versionCode"])
-    except Exception:  # noqa: BLE001
-        return None
+        with urllib.request.urlopen(_PAGES_URL, timeout=15) as r:
+            return int(json.loads(r.read().decode("utf-8"))["versionCode"])
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return None  # primera publicación: no hay manifiesto que superar
+        raise SystemExit(f"No pude leer el manifiesto publicado ({e}). Aborto.")
+    except Exception as e:  # noqa: BLE001
+        raise SystemExit(
+            f"No pude leer el manifiesto publicado en {_PAGES_URL} ({e.__class__.__name__}). "
+            "Sin saber qué versión hay publicada no puedo garantizar que esta la supere. "
+            "Reintenta cuando haya red. Aborto."
+        )
 
 def rama_actual() -> str:
     return _salida(["git", "rev-parse", "--abbrev-ref", "HEAD"]).strip()

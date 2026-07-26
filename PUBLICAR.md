@@ -48,7 +48,7 @@ instalada si la versión nueva lleva la misma firma, así que:
 | `versionCode` del APK (`aapt2`) == el declarado | Que el APK subido sea de verdad la versión anunciada |
 | `versionCode` del manifiesto == el declarado | Coherencia del JSON |
 | `sha256` del manifiesto == el del APK real | La app rechaza (y borra) cualquier descarga cuyo hash no cuadre |
-| `versionCode` > el ya publicado | Con un número igual o menor, nadie detectaría la actualización |
+| `versionCode` > el que sirve la URL pública | Con un número igual o menor, nadie detectaría la actualización. Se compara contra el manifiesto **publicado** (leído de la red), no contra el del repo: el del repo puede estar commiteado sin haber llegado a publicarse |
 | Huella de firma == `firma_esperada.txt` | Una firma distinta rompe la actualización de todas las instalaciones |
 
 ## Detalles que conviene recordar

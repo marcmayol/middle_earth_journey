@@ -44,6 +44,9 @@ kotlin {
             implementation(libs.androidx.datastore.preferences)
             implementation(libs.kotlinx.coroutines.android)
             implementation(libs.androidx.health.connect)
+            // Auto-actualización fuera de Play Store. Solo Android: commonMain e iosMain
+            // no lo ven, así que el proyecto sigue compilando para iOS en el Mac.
+            implementation(project(":actualizador"))
         }
     }
 }
@@ -59,6 +62,12 @@ android {
 
     sourceSets["main"].manifest.srcFile("src/androidMain/AndroidManifest.xml")
     sourceSets["main"].res.srcDirs("src/androidMain/res")
+
+    // BuildConfig.VERSION_CODE es la fuente de verdad de la versión instalada: con él
+    // compara el actualizador contra el manifiesto remoto.
+    buildFeatures {
+        buildConfig = true
+    }
 
     defaultConfig {
         applicationId = "com.marcm.middleearthjourney"

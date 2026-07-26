@@ -15,6 +15,8 @@ import androidx.health.connect.client.records.StepsRecord
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
+import com.marcm.actualizador.Actualizador
+import com.marcm.actualizador.Modo
 import com.marcm.middleearthjourney.data.StepRepository
 import com.marcm.middleearthjourney.service.StepTrackingService
 import kotlinx.coroutines.Job
@@ -25,6 +27,9 @@ class MainActivity : ComponentActivity() {
 
     private val repo: StepRepository
         get() = (application as MiddleEarthApp).stepRepository
+
+    private val actualizador: Actualizador
+        get() = (application as MiddleEarthApp).actualizador
 
     private val viewModel: MainViewModel by viewModels {
         object : ViewModelProvider.Factory {
@@ -62,8 +67,21 @@ class MainActivity : ComponentActivity() {
         ensureActivityRecognitionPermission()
         ensureNotificationPermission()
         ensureHealthConnect()
+        buscarActualizacionAlAbrir()
         setContent {
             App(viewModel = viewModel, onRequestPermission = { ensureActivityRecognitionPermission() })
+        }
+    }
+
+    /**
+     * Comprobación al abrir, con retardo para no competir con el arranque ni con la
+     * cinemática. En modo AUTOMATICO cualquier fallo (sin red, DNS, JSON roto, HTTP)
+     * muere en silencio: la app no avisa de nada.
+     */
+    private fun buscarActualizacionAlAbrir() {
+        lifecycleScope.launch {
+            delay(RETARDO_BUSQUEDA_MS)
+            actualizador.comprobar(Modo.AUTOMATICO)
         }
     }
 
@@ -71,6 +89,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        // Si el usuario vuelve de conceder el permiso de instalación, se reanuda el
+        // flujo; y se deshace el estado "Instalando" cuando la instalación se delegó
+        // al instalador del sistema (esa vía no devuelve resultado).
+        actualizador.onPermisoQuizaConcedido()
         // Mientras la app está en primer plano, releemos Health Connect periódicamente para ir
         // recogiendo los pasos que el smartwatch va sincronizando (repo.refresh() es no-op en
         // modo sensor). El ritmo de actualización real lo marca la sincronización del reloj.
@@ -132,5 +154,6 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         const val FOREGROUND_REFRESH_MS = 10_000L // refresco en primer plano cada 10 s
+        const val RETARDO_BUSQUEDA_MS = 3_000L // margen antes de buscar actualizaciones
     }
 }

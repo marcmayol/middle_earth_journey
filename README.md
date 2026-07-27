@@ -43,35 +43,42 @@ avisa cuando hay versión nueva.
 
 ## Estado / ramas
 
-- **`master`** — App **Android nativa funcional** (Kotlin + Jetpack Compose + Material 3).
-  Compila y corre. Es la referencia de comportamiento.
-- **`kmp-migration`** — Migración en curso a **Kotlin / Compose Multiplatform** (Android +
-  iOS). La estructura está montada; falta convertir el código compartido y escribir el lado
-  iOS. **Ver [`MIGRATION.md`](MIGRATION.md)** para el detalle de lo que queda.
+- **`main`** — La rama de verdad: **Kotlin / Compose Multiplatform** (módulo `:composeApp`).
+  **Android compila, corre y es lo que se publica.** El lado **iOS está escrito pero sin
+  compilar nunca**: se desarrolló en Windows, así que falta pasarlo por un Mac y pulir la
+  interop de Kotlin/Native. Ver [`MIGRATION.md`](MIGRATION.md) y [`iosApp/README.md`](iosApp/README.md).
+- **`kmp-migration`** — Histórica: es de donde salió la migración, ya fusionada en `main`.
+  No se trabaja ahí.
 
-## Compilar la app Android (rama `master`)
+> La app Android nativa original (módulo `:app`, Jetpack Compose sin multiplataforma) vivió
+> en `main` hasta julio de 2026 y solo queda en el histórico de git.
+
+## Compilar
 
 Requisitos: JDK 17, Android SDK (compileSdk 34), un dispositivo/emulador con Android 8+ (minSdk 26).
 
 ```bash
-git checkout master
-./gradlew :app:assembleDebug
-# APK en: app/build/outputs/apk/debug/app-debug.apk
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+./gradlew :composeApp:assembleDebug
+# APK en: composeApp/build/outputs/apk/debug/composeApp-debug.apk
+adb install -r composeApp/build/outputs/apk/debug/composeApp-debug.apk
 ```
 
-> En la rama `kmp-migration` el módulo es `:composeApp` (no `:app`), y el objetivo es que
-> `./gradlew :composeApp:assembleDebug` (Android) y el proyecto Xcode `iosApp` (iPhone)
-> compilen desde el mismo código. Ver `MIGRATION.md`.
+La build de `debug` lleva el sufijo `.debug` en el `applicationId`, así que **se instala al
+lado de la app publicada** en vez de actualizarla: son dos apps distintas para Android y no
+comparten datos. Para generar la versión firmada que se distribuye, ver [`PUBLICAR.md`](PUBLICAR.md).
+
+En iOS el objetivo es que el proyecto Xcode `iosApp/` compile ese mismo código común: abrirlo
+en Xcode, poner tu Team y darle a Run.
 
 ## Stack
 
-- **Compartido (objetivo KMP):** Jetpack/Compose Multiplatform (UI), lógica de viaje,
-  rutas, logros, sucesos, cinemáticas.
-- **Android:** sensor `TYPE_STEP_COUNTER`, servicio en primer plano + notificaciones,
-  `TextToSpeech`, persistencia.
-- **iOS (a implementar):** `CMPedometer` (pasos), `AVSpeechSynthesizer` (voz),
-  `UNUserNotificationCenter` (avisos).
+- **Compartido (`commonMain`):** Compose Multiplatform (UI), lógica de viaje, rutas, logros,
+  sucesos, cinemáticas, perfil corporal y calorías.
+- **Android:** pasos vía **Health Connect** (agrega móvil + smartwatch) con caída automática
+  al sensor `TYPE_STEP_COUNTER`, servicio en primer plano + notificaciones, `TextToSpeech`,
+  DataStore. Módulo `:actualizador` para actualizarse fuera de Play Store.
+- **iOS (escrito, sin compilar):** `CMPedometer` (pasos), `AVSpeechSynthesizer` (voz),
+  `UNUserNotificationCenter` (avisos), `multiplatform-settings` (persistencia).
 
-App personal, no publicada en tiendas; instalación por sideload (Android) y compilación
-desde Xcode (iOS).
+App personal. **No está en ninguna tienda**: se instala por sideload y a partir de ahí se
+actualiza sola contra su propio manifiesto (ver [`PUBLICAR.md`](PUBLICAR.md)).

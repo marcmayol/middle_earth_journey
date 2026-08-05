@@ -1,8 +1,8 @@
 {
-  "versionCode": 2,
-  "versionName": "1.1",
-  "url": "https://github.com/marcmayol/middle_earth_journey/releases/download/v1.1/middle-earth-journey-v1.1.apk",
-  "sha256": "81a7762ae0e2dcecd0042db3bd8379695cfcfc5726b9161b75e2f4ad084a5ced",
-  "notas": "Auto-actualizacion: la app ya avisa sola de las versiones nuevas y se instala sin pasar por la descarga manual.",
+  "versionCode": 3,
+  "versionName": "1.2",
+  "url": "https://github.com/marcmayol/middle_earth_journey/releases/download/v1.2/middle-earth-journey-v1.2.apk",
+  "sha256": "92d9bdcc928d05d349bef044db3109a8e4b5add493269a10a56085914ad96b89",
+  "notas": "Estadisticas: la tarjeta semanal ahora se mueve por las semanas anteriores, no solo la actual.",
   "check_horas": 24
 }

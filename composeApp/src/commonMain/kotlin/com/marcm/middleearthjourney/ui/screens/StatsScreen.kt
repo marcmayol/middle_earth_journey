@@ -3,6 +3,7 @@ package com.marcm.middleearthjourney.ui.screens
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,12 +18,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.geometry.Offset
@@ -65,6 +73,7 @@ import com.marcm.middleearthjourney.ui.TextSecondary
 import com.marcm.middleearthjourney.ui.intEs
 import com.marcm.middleearthjourney.util.compactNumber
 import com.marcm.middleearthjourney.util.fmtDayMonth
+import com.marcm.middleearthjourney.util.fmtDayMonthYear
 import com.marcm.middleearthjourney.util.fmtLongDate
 import com.marcm.middleearthjourney.util.kmEs
 import com.marcm.middleearthjourney.util.pad2
@@ -85,12 +94,12 @@ fun StatsScreen(stats: StatsState) {
         contentPadding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        item { ScreenTitle("Estadísticas") }
+        item(key = "titulo") { ScreenTitle("Estadísticas") }
 
         if (!stats.hasHistory) {
-            item { NoticeCard("Aún no hay datos diarios. Tus pasos empezarán a registrarse por día desde hoy.") }
+            item(key = "aviso") { NoticeCard("Aún no hay datos diarios. Tus pasos empezarán a registrarse por día desde hoy.") }
         } else if (stats.firstDayWithData != null) {
-            item {
+            item(key = "aviso") {
                 NoticeCard(
                     "Datos diarios registrados desde el ${fmtLongDate(stats.firstDayWithData)}. " +
                         "Los días anteriores aparecen vacíos.",
@@ -99,14 +108,14 @@ fun StatsScreen(stats: StatsState) {
         }
 
         if (stats.caloriesEnabled) {
-            item { CaloriesCard(stats) }
+            item(key = "calorias") { CaloriesCard(stats) }
         }
-        item { HourlyCard(stats) }
-        item { WeeklyCard(stats) }
-        item { MonthlyCard(stats) }
-        item { YearlyCard(stats) }
+        item(key = "horas") { HourlyCard(stats) }
+        item(key = "semana") { WeeklyCard(stats) }
+        item(key = "mes") { MonthlyCard(stats) }
+        item(key = "anyo") { YearlyCard(stats) }
 
-        item { Spacer(Modifier.height(40.dp)) }
+        item(key = "pie") { Spacer(Modifier.height(40.dp)) }
     }
 }
 
@@ -186,19 +195,52 @@ private fun HourlyCard(stats: StatsState) {
 
 @Composable
 private fun WeeklyCard(stats: StatsState) {
-    val weekEnd = plusDays(stats.weekStart, 6)
-    val rangeLabel = "${fmtDayMonth(stats.weekStart)} — ${fmtDayMonth(weekEnd)}"
+    // Índice absoluto en stats.weeks; el valor inicial se recorta a la semana en curso.
+    var selectedIndex by rememberSaveable { mutableStateOf(Int.MAX_VALUE) }
+    val index = selectedIndex.coerceIn(0, stats.weeks.lastIndex)
+    val week = stats.weeks[index]
+    val weeksBack = stats.weeks.lastIndex - index
+
+    val weekEnd = plusDays(week.start, 6)
+    val showYear = week.start.year != stats.currentYear || weekEnd.year != stats.currentYear
+    val rangeLabel = if (showYear) {
+        "${fmtDayMonth(week.start)} — ${fmtDayMonthYear(weekEnd)}"
+    } else {
+        "${fmtDayMonth(week.start)} — ${fmtDayMonth(weekEnd)}"
+    }
+    val title = when (weeksBack) {
+        0 -> "Esta semana"
+        1 -> "Semana pasada"
+        else -> "Hace $weeksBack semanas"
+    }
 
     CodexCard(modifier = Modifier.fillMaxWidth()) {
-        SectionHeader("Esta semana", rangeLabel, intEs(stats.weeklyTotal))
+        SectionHeader(title, rangeLabel, intEs(week.total))
         Spacer(Modifier.height(14.dp))
-        BarChart(
-            values = stats.weeklySteps,
-            labels = WEEK_LABELS,
-            modifier = Modifier.fillMaxWidth().height(160.dp),
-        )
-        val bestDow = stats.bestDayOfWeek
-        if (bestDow != null && stats.bestDaySteps > 0L) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            NavArrow(
+                icon = Icons.Filled.ChevronLeft,
+                description = "Semana anterior",
+                enabled = index > 0,
+                onClick = { selectedIndex = index - 1 },
+            )
+            BarChart(
+                values = week.steps,
+                labels = WEEK_LABELS,
+                modifier = Modifier.weight(1f).height(160.dp),
+            )
+            NavArrow(
+                icon = Icons.Filled.ChevronRight,
+                description = "Semana siguiente",
+                enabled = index < stats.weeks.lastIndex,
+                onClick = { selectedIndex = index + 1 },
+            )
+        }
+        val bestDow = week.bestDayOfWeek
+        if (bestDow != null && week.bestDaySteps > 0L) {
             Spacer(Modifier.height(12.dp))
             Text(
                 text = buildAnnotatedString {
@@ -206,12 +248,38 @@ private fun WeeklyCard(stats: StatsState) {
                     withStyle(SpanStyle(color = GoldBright, fontWeight = FontWeight.SemiBold)) {
                         append(DOW_LONG[bestDow.isoDayNumber - 1])
                     }
-                    append(" · ${intEs(stats.bestDaySteps)} pasos")
+                    append(" · ${intEs(week.bestDaySteps)} pasos")
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextBody,
             )
         }
+    }
+}
+
+/** Flecha para moverse por el historial semanal; apagada cuando no hay adónde ir. */
+@Composable
+private fun NavArrow(
+    icon: ImageVector,
+    description: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(34.dp)
+            .clip(RoundedCornerShape(11.dp))
+            .background(if (enabled) CellBg else Color.Transparent)
+            .border(1.dp, if (enabled) GoldDivider else Color.Transparent, RoundedCornerShape(11.dp))
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            icon,
+            contentDescription = if (enabled) description else null,
+            tint = if (enabled) GoldBright else GoldBase.copy(alpha = 0.18f),
+            modifier = Modifier.size(20.dp),
+        )
     }
 }
 

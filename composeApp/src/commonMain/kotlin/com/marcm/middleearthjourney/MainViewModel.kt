@@ -92,12 +92,18 @@ data class JourneyState(
     val canStartReturn: Boolean,
 )
 
-data class StatsState(
-    val weekStart: LocalDate,
-    val weeklySteps: List<Long>,
-    val weeklyTotal: Long,
+/** Una semana natural (lunes a domingo) del historial. */
+data class WeekStats(
+    val start: LocalDate,
+    val steps: List<Long>,
+    val total: Long,
     val bestDayOfWeek: DayOfWeek?,
     val bestDaySteps: Long,
+)
+
+data class StatsState(
+    /** De la más antigua con datos a la actual; la última es siempre la semana en curso. */
+    val weeks: List<WeekStats>,
     val monthLabel: String,
     val currentMonthSteps: Long,
     val previousMonthSteps: Long,
@@ -117,13 +123,20 @@ data class StatsState(
     val monthCalories: Long,
     val yearCalories: Long,
 ) {
+    /** La semana en curso: la que se ve al abrir la pantalla. */
+    val currentWeek: WeekStats get() = weeks.last()
+
     companion object {
         val EMPTY = StatsState(
-            weekStart = mondayOf(today()),
-            weeklySteps = List(7) { 0L },
-            weeklyTotal = 0L,
-            bestDayOfWeek = null,
-            bestDaySteps = 0L,
+            weeks = listOf(
+                WeekStats(
+                    start = mondayOf(today()),
+                    steps = List(7) { 0L },
+                    total = 0L,
+                    bestDayOfWeek = null,
+                    bestDaySteps = 0L,
+                ),
+            ),
             monthLabel = "",
             currentMonthSteps = 0L,
             previousMonthSteps = 0L,
@@ -358,14 +371,21 @@ class MainViewModel(private val repo: JourneyRepository) : ViewModel() {
         val height = settings.heightCm
         fun kcal(steps: Long): Long = caloriesBurned(steps, weight, height).roundToLong()
         val now = today()
-        val weekStart = mondayOf(now)
-        val weekly = (0..6).map { offset ->
-            daily[plusDays(weekStart, offset.toLong()).epochDay()] ?: 0L
+        val currentWeekStart = mondayOf(now)
+
+        // Historial semanal: desde la semana del primer día con datos hasta la actual.
+        val firstDataDay = daily.entries.filter { it.value > 0L }.minOfOrNull { it.key }
+        val oldestWeekStart = firstDataDay
+            ?.let { mondayOf(dateFromEpochDay(it)) }
+            ?.takeIf { it.epochDay() < currentWeekStart.epochDay() }
+            ?: currentWeekStart
+        val weeksBack = ((currentWeekStart.epochDay() - oldestWeekStart.epochDay()) / 7)
+            .toInt()
+            .coerceIn(0, MAX_WEEKS_BACK)
+        val weeks = (weeksBack downTo 0).map { back ->
+            weekStatsAt(daily, plusDays(currentWeekStart, -7L * back))
         }
-        val weeklyTotal = weekly.sum()
-        val bestIdx = weekly.withIndex().filter { it.value > 0L }.maxByOrNull { it.value }?.index
-        val bestDow = bestIdx?.let { dayOfWeekFromMondayIndex(it) }
-        val bestSteps = if (bestIdx != null) weekly[bestIdx] else 0L
+        val weeklyTotal = weeks.last().total
 
         val firstThisMonth = firstOfMonth(now)
         val daysThisMonth = daysInMonth(now.year, now.monthNumber)
@@ -395,18 +415,11 @@ class MainViewModel(private val repo: JourneyRepository) : ViewModel() {
         val currentYearSteps = monthlySeries.sum()
 
         val daysWithData = daily.count { it.value > 0L }
-        val firstDay = daily.entries
-            .filter { it.value > 0L }
-            .minByOrNull { it.key }
-            ?.let { dateFromEpochDay(it.key) }
+        val firstDay = firstDataDay?.let { dateFromEpochDay(it) }
         val monthLabel = MONTH_NAMES.getOrElse(now.monthNumber - 1) { "" }
 
         return StatsState(
-            weekStart = weekStart,
-            weeklySteps = weekly,
-            weeklyTotal = weeklyTotal,
-            bestDayOfWeek = bestDow,
-            bestDaySteps = bestSteps,
+            weeks = weeks,
             monthLabel = monthLabel,
             currentMonthSteps = currentMonthSteps,
             previousMonthSteps = previousMonthSteps,
@@ -428,7 +441,25 @@ class MainViewModel(private val repo: JourneyRepository) : ViewModel() {
         )
     }
 
+    /** Resumen de la semana que empieza en [weekStart] (lunes). */
+    private fun weekStatsAt(daily: Map<Long, Long>, weekStart: LocalDate): WeekStats {
+        val steps = (0..6).map { offset ->
+            daily[plusDays(weekStart, offset.toLong()).epochDay()] ?: 0L
+        }
+        val bestIdx = steps.withIndex().filter { it.value > 0L }.maxByOrNull { it.value }?.index
+        return WeekStats(
+            start = weekStart,
+            steps = steps,
+            total = steps.sum(),
+            bestDayOfWeek = bestIdx?.let { dayOfWeekFromMondayIndex(it) },
+            bestDaySteps = if (bestIdx != null) steps[bestIdx] else 0L,
+        )
+    }
+
     companion object {
+        /** Tope de semanas navegables hacia atrás (2 años, lo que guarda el historial diario). */
+        private const val MAX_WEEKS_BACK = 104
+
         private val MONTH_NAMES = listOf(
             "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
             "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",

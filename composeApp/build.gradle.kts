@@ -75,8 +75,8 @@ android {
         applicationId = "com.marcm.middleearthjourney"
         minSdk = libs.versions.androidMinSdk.get().toInt()
         targetSdk = libs.versions.androidTargetSdk.get().toInt()
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.2"
     }
     // Firma de release. Los datos salen de keystore.properties (raíz del proyecto, fuera
     // del control de versiones); el script de publicación lo genera desde variables de

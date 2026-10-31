@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 
 private val Context.dataStore by preferencesDataStore(name = "frodo_steps")
 
@@ -44,6 +45,8 @@ private object Keys {
     val HC_ENABLED = booleanPreferencesKey("hc_enabled")
     val HC_ANCHOR_MILLIS = longPreferencesKey("hc_anchor_millis")
     val HC_ANCHOR_OFFSET = longPreferencesKey("hc_anchor_offset")
+    /** Último progreso del viaje leído de Health Connect, para no perderlo si se cae al sensor. */
+    val HC_LAST_JOURNEY = longPreferencesKey("hc_last_journey")
     val WEIGHT_KG = intPreferencesKey("body_weight_kg")
     val HEIGHT_CM = intPreferencesKey("body_height_cm")
     val SHOW_CALORIES = booleanPreferencesKey("show_calories")
@@ -126,6 +129,7 @@ class StepRepository(private val appContext: Context) : SensorEventListener, Jou
     @Volatile private var hcEnabled: Boolean = false
     @Volatile private var hcAnchorMillis: Long = -1L
     @Volatile private var hcAnchorOffset: Long = 0L
+    @Volatile private var hcLastJourney: Long = -1L
 
     private val _usingHealthConnect = MutableStateFlow(false)
     val usingHealthConnect: StateFlow<Boolean> = _usingHealthConnect
@@ -233,6 +237,7 @@ class StepRepository(private val appContext: Context) : SensorEventListener, Jou
         hcEnabled = prefs[Keys.HC_ENABLED] ?: false
         hcAnchorMillis = prefs[Keys.HC_ANCHOR_MILLIS] ?: -1L
         hcAnchorOffset = prefs[Keys.HC_ANCHOR_OFFSET] ?: 0L
+        hcLastJourney = prefs[Keys.HC_LAST_JOURNEY] ?: -1L
         _usingHealthConnect.value = hcEnabled
         weightKgValue = (prefs[Keys.WEIGHT_KG] ?: DEFAULT_WEIGHT_KG).coerceIn(WEIGHT_RANGE)
         heightCmValue = (prefs[Keys.HEIGHT_CM] ?: DEFAULT_HEIGHT_CM).coerceIn(HEIGHT_RANGE)
@@ -243,7 +248,7 @@ class StepRepository(private val appContext: Context) : SensorEventListener, Jou
         publishJourney()
         // En modo HC mostramos al menos el progreso preservado hasta que llegue el primer
         // refresco real (evita un parpadeo a 0 al abrir la app).
-        if (hcEnabled) _journeySteps.value = hcAnchorOffset.coerceAtLeast(0L)
+        if (hcEnabled) _journeySteps.value = maxOf(hcAnchorOffset, hcLastJourney).coerceAtLeast(0L)
         val historyRaw = prefs[Keys.DAILY_HISTORY].orEmpty()
         val migrated = prefs[Keys.MIGRATED_DAILY_V1] ?: false
         var migrationApplied = false
@@ -286,14 +291,79 @@ class StepRepository(private val appContext: Context) : SensorEventListener, Jou
                 return // en modo HC no registramos el sensor: evita doble conteo
             }
             // Health Connect dejó de estar disponible o se revocó el permiso → caída al sensor.
-            hcEnabled = false
-            _usingHealthConnect.value = false
-            publishJourney()
-            persist()
+            fallBackToSensor()
         }
         stepCounterSensor?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
         }
+    }
+
+    /**
+     * Sale del modo Health Connect sin perder el viaje: el sensor sigue desde el último
+     * progreso conocido. Antes se recalculaba como `accumulated - baseline`, que en modo HC
+     * está congelado desde que se activó, y el mapa retrocedía todo lo andado desde entonces.
+     * El sensor se re-ancla (lastSensorValue = -1) porque su última lectura puede ser de otro
+     * arranque u otro móvil y daría un delta inventado.
+     */
+    private fun fallBackToSensor() {
+        val journeyNow = maxOf(_journeySteps.value, hcAnchorOffset, hcLastJourney).coerceAtLeast(0L)
+        hcEnabled = false
+        _usingHealthConnect.value = false
+        journeyBaseline = accumulated - journeyNow
+        lastSensorValue = -1L
+        publishJourney()
+        persist()
+    }
+
+    /** Estado de Health Connect en el dispositivo (para la sección de Ajustes). */
+    fun healthConnectStatus(): HcStatus = healthConnect.status()
+
+    suspend fun hasHealthConnectPermission(): Boolean = healthConnect.hasPermission()
+
+    suspend fun hasHealthConnectHistoryPermission(): Boolean = healthConnect.hasHistoryPermission()
+
+    /** Inicio (00:00 local) del día en que empezó el viaje activo. */
+    private fun journeyStartInstant(): Instant? {
+        if (journeyStartEpochDay < 0L) return null
+        return LocalDate.ofEpochDay(journeyStartEpochDay).atStartOfDay(ZoneId.systemDefault()).toInstant()
+    }
+
+    /**
+     * Pasos que Health Connect tiene desde el día en que empezó el viaje hasta ahora; null si
+     * no se puede leer. Sin el permiso de historial, Health Connect recorta a ~30 días.
+     */
+    suspend fun healthConnectJourneySteps(): Long? {
+        ensureLoaded()
+        if (!healthConnect.isAvailable() || !healthConnect.hasPermission()) return null
+        val start = journeyStartInstant() ?: return null
+        return healthConnect.aggregateSteps(start, Instant.now())
+    }
+
+    /**
+     * Rehace el viaje entero con lo que hay en Health Connect desde el día en que empezó
+     * (lo pide el usuario desde Ajustes, tras ver la comparación). El anchor pasa al inicio
+     * del viaje sin offset, y el historial diario se rellena desde ese día.
+     */
+    suspend fun rebuildFromHealthConnect(): Boolean {
+        ensureLoaded()
+        if (!healthConnect.isAvailable() || !healthConnect.hasPermission()) return false
+        val start = journeyStartInstant() ?: return false
+        hcEnabled = true
+        hcAnchorMillis = start.toEpochMilli()
+        hcAnchorOffset = 0L
+        _usingHealthConnect.value = true
+        stopListening()
+        val buckets = healthConnect.dailyBuckets(LocalDate.ofEpochDay(journeyStartEpochDay))
+        if (buckets.isNotEmpty()) {
+            synchronized(dailyHistoryLock) {
+                for ((day, steps) in buckets) dailyHistory[day] = steps
+                pruneOldDays(LocalDate.now().toEpochDay())
+                _dailySteps.value = HashMap(dailyHistory)
+                publishToday()
+            }
+        }
+        refreshFromHealthConnect()
+        return true
     }
 
     fun stopListening() {
@@ -315,6 +385,7 @@ class StepRepository(private val appContext: Context) : SensorEventListener, Jou
             hcEnabled = true
             hcAnchorMillis = System.currentTimeMillis()
             hcAnchorOffset = (accumulated - journeyBaseline).coerceAtLeast(0L)
+            hcLastJourney = hcAnchorOffset
             _usingHealthConnect.value = true
             stopListening() // el sensor ya no hace falta
             persist()
@@ -334,7 +405,9 @@ class StepRepository(private val appContext: Context) : SensorEventListener, Jou
         val now = Instant.now()
         val anchor = if (hcAnchorMillis >= 0L) Instant.ofEpochMilli(hcAnchorMillis) else now
         val raw = healthConnect.aggregateSteps(anchor, now)
-        _journeySteps.value = (raw + hcAnchorOffset).coerceAtLeast(0L)
+        val journey = (raw + hcAnchorOffset).coerceAtLeast(0L)
+        _journeySteps.value = journey
+        hcLastJourney = journey
 
         val todayEpoch = LocalDate.now().toEpochDay()
         if (missionStartEpochDay < 0L) {
@@ -435,6 +508,7 @@ class StepRepository(private val appContext: Context) : SensorEventListener, Jou
             // Nuevo viaje: contamos desde cero a partir de ahora.
             hcAnchorMillis = System.currentTimeMillis()
             hcAnchorOffset = 0L
+            hcLastJourney = 0L
         }
         routeChosenValue = true
         cineSeenValue = emptySet()
@@ -522,6 +596,7 @@ class StepRepository(private val appContext: Context) : SensorEventListener, Jou
         val snapshotHcEnabled = hcEnabled
         val snapshotHcAnchorMillis = hcAnchorMillis
         val snapshotHcAnchorOffset = hcAnchorOffset
+        val snapshotHcLastJourney = hcLastJourney
         val snapshotWeight = weightKgValue
         val snapshotHeight = heightCmValue
         val snapshotShowCalories = showCaloriesValue
@@ -544,6 +619,7 @@ class StepRepository(private val appContext: Context) : SensorEventListener, Jou
                 prefs[Keys.HC_ENABLED] = snapshotHcEnabled
                 if (snapshotHcAnchorMillis >= 0L) prefs[Keys.HC_ANCHOR_MILLIS] = snapshotHcAnchorMillis
                 prefs[Keys.HC_ANCHOR_OFFSET] = snapshotHcAnchorOffset
+                if (snapshotHcLastJourney >= 0L) prefs[Keys.HC_LAST_JOURNEY] = snapshotHcLastJourney
                 prefs[Keys.WEIGHT_KG] = snapshotWeight
                 prefs[Keys.HEIGHT_CM] = snapshotHeight
                 prefs[Keys.SHOW_CALORIES] = snapshotShowCalories

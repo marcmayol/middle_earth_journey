@@ -6,6 +6,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
     <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" />
     <uses-feature android:name="android.hardware.sensor.stepcounter" android:required="false" />
 
     <!-- Health Connect: en Android 13 e inferiores es una app aparte; necesitamos poder

@@ -31,29 +31,58 @@ import java.time.ZoneId
  */
 class HealthConnectStepSource(private val appContext: Context) {
 
-    /** Permisos que pedimos: solo lectura de pasos. */
-    val permissions: Set<String> = setOf(HealthPermission.getReadPermission(StepsRecord::class))
+    /** Permiso imprescindible: lectura de pasos. */
+    val readStepsPermission: String = HealthPermission.getReadPermission(StepsRecord::class)
+
+    /**
+     * Permiso de historial: sin él, Health Connect solo deja leer unos 30 días anteriores a la
+     * concesión del permiso. Hace falta para recalcular el viaje entero (p. ej. en un móvil
+     * nuevo). La librería alpha07 no trae la constante, así que va como texto.
+     */
+    val historyPermission: String = "android.permission.health.READ_HEALTH_DATA_HISTORY"
+
+    /** Permisos que pedimos al conectar. Solo el de pasos es obligatorio. */
+    val permissions: Set<String> = setOf(readStepsPermission, historyPermission)
+
+    /** Estado de Health Connect en el dispositivo. */
+    fun status(): HcStatus = when (HealthConnectClient.getSdkStatus(appContext)) {
+        HealthConnectClient.SDK_AVAILABLE -> HcStatus.DISPONIBLE
+        HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED -> HcStatus.ACTUALIZAR
+        else -> HcStatus.NO_INSTALADO
+    }
 
     /** ¿Está Health Connect instalado y utilizable en este dispositivo? */
-    fun isAvailable(): Boolean =
-        HealthConnectClient.getSdkStatus(appContext) == HealthConnectClient.SDK_AVAILABLE
+    fun isAvailable(): Boolean = status() == HcStatus.DISPONIBLE
 
-    /** Cliente perezoso; null si Health Connect no está disponible. */
-    private val client: HealthConnectClient? by lazy {
-        runCatching { if (isAvailable()) HealthConnectClient.getOrCreate(appContext) else null }
-            .getOrNull()
-    }
+    /**
+     * Cliente; null si Health Connect no está disponible. Solo se guarda cuando se obtiene:
+     * si se instala Health Connect con la app ya abierta, la siguiente llamada lo encuentra
+     * (antes era un `lazy` que se quedaba con el null para toda la vida del proceso).
+     */
+    @Volatile private var cachedClient: HealthConnectClient? = null
+    private val client: HealthConnectClient?
+        get() {
+            cachedClient?.let { return it }
+            val c = runCatching {
+                if (isAvailable()) HealthConnectClient.getOrCreate(appContext) else null
+            }.getOrNull()
+            cachedClient = c
+            return c
+        }
 
     /** Contract para lanzar la solicitud de permisos desde una Activity. */
     fun requestPermissionsContract() =
         PermissionController.createRequestPermissionResultContract()
 
     /** ¿Tenemos concedido el permiso de lectura de pasos? */
-    suspend fun hasPermission(): Boolean {
-        val c = client ?: return false
-        return runCatching {
-            c.permissionController.getGrantedPermissions().containsAll(permissions)
-        }.getOrDefault(false)
+    suspend fun hasPermission(): Boolean = granted().contains(readStepsPermission)
+
+    /** ¿Tenemos el permiso de historial completo? */
+    suspend fun hasHistoryPermission(): Boolean = granted().contains(historyPermission)
+
+    private suspend fun granted(): Set<String> {
+        val c = client ?: return emptySet()
+        return runCatching { c.permissionController.getGrantedPermissions() }.getOrDefault(emptySet())
     }
 
     /** Total de pasos en el rango [start, end). Devuelve 0 ante cualquier fallo. */
@@ -126,3 +155,6 @@ class HealthConnectStepSource(private val appContext: Context) {
         return out
     }
 }
+
+/** Estado de Health Connect en el dispositivo. */
+enum class HcStatus { DISPONIBLE, ACTUALIZAR, NO_INSTALADO }

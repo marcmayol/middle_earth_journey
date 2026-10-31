@@ -1,19 +1,24 @@
 package com.marcm.middleearthjourney
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import androidx.health.connect.client.PermissionController
-import androidx.health.connect.client.permission.HealthPermission
-import androidx.health.connect.client.records.StepsRecord
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
@@ -21,6 +26,7 @@ import com.marcm.actualizador.Actualizador
 import com.marcm.actualizador.Modo
 import com.marcm.middleearthjourney.data.StepRepository
 import com.marcm.middleearthjourney.service.StepTrackingService
+import com.marcm.middleearthjourney.ui.HealthConnectSection
 import com.marcm.middleearthjourney.ui.UpdateBanner
 import com.marcm.middleearthjourney.ui.UpdateSettingsSection
 import kotlinx.coroutines.Job
@@ -53,16 +59,17 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission()
     ) { /* Si lo deniega, el servicio sigue funcionando pero sin notificación visible. */ }
 
-    // Permiso de lectura de pasos de Health Connect (agrega móvil + smartwatch).
-    private val healthPermissions = setOf(HealthPermission.getReadPermission(StepsRecord::class))
+    // Permisos de Health Connect: pasos (obligatorio) + historial (para recalcular el viaje).
+    private val healthPermissions: Set<String>
+        get() = repo.healthConnectPermissions
 
     private val requestHealthConnect = registerForActivityResult(
         PermissionController.createRequestPermissionResultContract()
-    ) { granted: Set<String> ->
-        if (granted.containsAll(healthPermissions)) {
-            lifecycleScope.launch {
-                if (repo.enableHealthConnect()) StepTrackingService.start(this@MainActivity)
-            }
+    ) { _: Set<String> ->
+        // Se mira el permiso de pasos en Health Connect en vez de fiarse del set devuelto:
+        // si ya estaba concedido y solo faltaba el de historial, el set puede venir incompleto.
+        lifecycleScope.launch {
+            if (repo.enableHealthConnect()) StepTrackingService.start(this@MainActivity)
         }
     }
 
@@ -83,7 +90,17 @@ class MainActivity : ComponentActivity() {
                         onActualizar = { actualizador.actualizarAhora() },
                     )
                 },
-                updateSettings = { UpdateSettingsSection(actualizador) },
+                updateSettings = {
+                    Column {
+                        HealthConnectSection(
+                            repo = repo,
+                            onConnect = { connectHealthConnect() },
+                            onInstall = { openHealthConnectStore() },
+                        )
+                        Spacer(Modifier.height(28.dp))
+                        UpdateSettingsSection(actualizador)
+                    }
+                },
             )
         }
     }
@@ -113,6 +130,13 @@ class MainActivity : ComponentActivity() {
         // modo sensor). El ritmo de actualización real lo marca la sincronización del reloj.
         foregroundRefreshJob?.cancel()
         foregroundRefreshJob = lifecycleScope.launch {
+            // Si Health Connect apareció después (instalado o con permiso concedido fuera de la
+            // app), se conecta solo, sin preguntar: enableHealthConnect no pide nada.
+            if (!repo.usingHealthConnect.value && repo.healthConnectAvailable &&
+                repo.enableHealthConnect()
+            ) {
+                StepTrackingService.start(this@MainActivity)
+            }
             while (true) {
                 repo.refresh()
                 delay(FOREGROUND_REFRESH_MS)
@@ -165,6 +189,33 @@ class MainActivity : ComponentActivity() {
                 requestHealthConnect.launch(healthPermissions)
             }
         }
+    }
+
+    /**
+     * "Conectar con Health Connect" de Ajustes: pide los permisos que falten; si ya están
+     * todos, activa el modo directamente.
+     */
+    private fun connectHealthConnect() {
+        if (!repo.healthConnectAvailable) {
+            openHealthConnectStore()
+            return
+        }
+        lifecycleScope.launch {
+            val complete = repo.hasHealthConnectPermission() && repo.hasHealthConnectHistoryPermission()
+            if (complete) {
+                if (repo.enableHealthConnect()) StepTrackingService.start(this@MainActivity)
+            } else {
+                requestHealthConnect.launch(healthPermissions)
+            }
+        }
+    }
+
+    /** Ficha de Health Connect en la tienda; si no hay tienda, la web. */
+    private fun openHealthConnectStore() {
+        val pkg = "com.google.android.apps.healthdata"
+        val market = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$pkg"))
+        val web = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$pkg"))
+        runCatching { startActivity(market) }.onFailure { runCatching { startActivity(web) } }
     }
 
     private companion object {
